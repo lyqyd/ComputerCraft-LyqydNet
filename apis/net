@@ -1,0 +1,192 @@
+routeTable = {}
+daemonTable = {}
+
+function netInit ()
+	local packet = "HA:"
+	local label = os.getComputerLabel()
+	if label then
+		if turtle then
+			packet = packet.."T "..label
+		else
+			if daemonTable.routed then
+				packet = packet.."R "..label
+			else
+				packet = packet.."C "..label
+			end
+		end
+		local open = false
+		for n,side in pairs(rs.getSides()) do
+			if peripheral.getType(side) == "modem" then
+				rednet.open(side)
+				open = true
+				break
+			end
+		end
+		if open then return rednet.broadcast(packet) end
+	end
+	return false
+end
+
+function daemonAdd (dName, dFunction)
+	daemonTable[dName] = coroutine.create(dFunction)
+	coroutine.resume(daemonTable[dName], 0, "SI", "start")
+end
+
+function daemonRemove (dName)
+	if daemonTable[dName] then
+		daemonTable[dName] = nil
+		return true
+	else
+		return false
+	end
+end
+
+function routeFromName (name)
+	for rNum,rInfo in ipairs(routeTable) do
+		if rInfo.name == tostring(name) then return rNum end
+	end
+	return false
+end
+
+function routeFromCID (compID)
+	for rNum,rInfo in ipairs(routeTable) do
+		if rInfo.idNum == tonumber(compID) then return rNum end
+	end
+	return false
+end
+
+function nameFromRoute (route)
+	if routeTable[route] then
+		return routeTable[route].name
+	else
+		return false
+	end
+end
+
+function CIDFromRoute (route)
+	if routeTable[route] then
+		return routeTable[route].idNum
+	else
+		return false
+	end
+end
+
+function packet_send (pType, routeNum, message)
+	routeNum = tonumber(routeNum)
+	if routeTable[routeNum] then
+		if routeTable[routeNum].gateway ~= 0 then
+			return rednet.send(routeTable[routeNum].gateway, "PF:"..routeTable[routeNum].idNum..","..os.computerID().."<"..pType..":"..tostring(message)..">")
+		end
+		return rednet.send(routeTable[routeNum].idNum, pType..":"..tostring(message))
+	else return false end
+end
+
+function packet_receive (idNumber, message)
+	idNumber = tonumber(idNumber)
+	for rNum,rInfo in ipairs(routeTable) do
+		if idNumber == rInfo.idNum then
+			return rNum, string.sub(message, 1, 2), string.match(message, ":(.*)")
+		end
+	end
+end
+
+function add_route (idNumber, compType, compName, gateway, cost)
+	idNumber = tonumber(idNumber)
+	compType = tostring(compType)
+	compName = tostring(compName)
+	if gateway then
+		gateway = tonumber(gateway)
+	else
+		gateway = 0
+	end
+	if cost then
+		cost = tonumber(cost)
+	else
+		cost = 0
+	end
+	for rNum,rInfo in ipairs(routeTable) do
+		if idNumber == rInfo.idNum then
+			if rInfo.type ~= compType then
+				rInfo.type = compType
+			end
+			if rInfo.cost > cost then
+				rInfo.gateway = gateway
+				rInfo.cost = cost
+			end
+			return rNum
+		end
+	end
+	local route = {}
+	route.idNum = idNumber
+	route.type = compType
+	route.name = compName
+	route.gateway = gateway
+	route.cost = cost
+	table.insert(routeTable, route) 
+	return #routeTable
+end
+
+function remove_route (route)
+	if route then
+		local file = io.open("/etc/hosts", "w" )
+		if file then
+			for rNum, rInfo in ipairs(routeTable) do
+				if rNum ~= route then
+					file:write(rInfo.idNum..":"..rInfo.gateway..","..rInfo.cost..";"..rInfo.type.." "..rInfo.name.."\n")
+				end
+			end
+			file:close()
+		end
+		routeTable[route] = false
+	end
+end
+
+function localprint (...)
+	w, h = term.getSize()
+	x, y = term.getCursorPos()
+	term.setCursorPos(1, y)
+	term.clearLine()
+	lines = print(...)
+	if y + lines <= h then
+		y = y + lines
+	else
+		y = h
+	end
+	term.setCursorPos(1, y)
+	term.write("> ")
+	term.setCursorPos(x, y)
+	return lines
+end
+
+function rednet_message (id, message, dist)
+	local packetType = string.sub(message, 1, 2)
+	if packetType == "HA" or packetType == "HI" or packetType == "HR" or packetType == "HQ" or packetType == "HT" or packetType == "RA" or packetType == "RR" then
+		if daemonTable.routed then
+			coroutine.resume(daemonTable.routed, id, message, dist)
+		elseif daemonTable.netd then
+			coroutine.resume(daemonTable.netd, id, message, dist)
+		else
+			return nil
+		end
+	elseif packetType == "PF" then
+		if tonumber(string.match(message, ":(%d+),%d+<")) == os.computerID() then
+			return rednet_message(string.match(message, ":%d+,(%d+)<"), string.match(message, "<(.*)>"), false)
+		elseif daemonTable.routed then
+			coroutine.resume(daemonTable.routed, id, message)
+		else
+			return false
+		end
+	else
+		local routeNum, packetType, message = packet_receive(id, message)
+		local daemonName = string.match(message, "(%a+);")
+		if type(daemonTable[daemonName]) == "thread" then
+			oldprint = print
+			print = localprint
+			coroutine.resume(daemonTable[daemonName], routeNum, packetType, string.match(message, ";(.*)"), dist)
+			print = oldprint
+			return nil
+		else
+			return routeNum, packetType, message, dist
+		end
+	end	
+end

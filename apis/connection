@@ -1,0 +1,206 @@
+connectionTable = {}
+local pTypeLookup = {}
+pTypeLookup.query = "SQ"
+pTypeLookup.response = "SR"
+pTypeLookup.data = "SP"
+pTypeLookup.done = "SB"
+pTypeLookup.close = "SC"
+pTypeLookup.fileQuery = "FQ"
+pTypeLookup.fileSend = "FS"
+pTypeLookup.fileResponse = "FR"
+pTypeLookup.fileHeader = "FH"
+pTypeLookup.fileData = "FD"
+pTypeLookup.fileEnd = "FE"
+pTypeLookup.instruction = "SI"
+pTypeLookup.SQ = "query"
+pTypeLookup.SR = "response"
+pTypeLookup.SP = "data"
+pTypeLookup.SB = "done"
+pTypeLookup.SC = "close"
+pTypeLookup.FQ = "fileQuery"
+pTypeLookup.FS = "fileSend"
+pTypeLookup.FR = "fileResponse"
+pTypeLookup.FH = "fileHeader"
+pTypeLookup.FD = "fileData"
+pTypeLookup.FE = "fileEnd"
+pTypeLookup.SI = "instruction"
+
+function listen (serviceName, time)
+	--used by foreground servers to wait for incoming packets.
+	local listenTimeOut = nil
+	if time then listenTimeOut = os.startTimer(time) end
+	while true do
+		local event, p1, p2, p3 = os.pullEvent()
+		if event == "timer" and p1 == listenTimeOut then
+			return false
+		elseif event == "rednet_message" then
+			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+			if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
+			if routeNum then
+				if serviceName == string.match(message, "(%a+);") then
+					for cNum, cInfo in pairs(connectionTable) do
+						if cInfo.route == routeNum then return cNum, packetType, string.match(message, ";(.*)"), dist end
+					end
+					local conn = {}
+					conn.route = routeNum
+					conn.name = net.nameFromRoute(routeNum)
+					conn.service = serviceName
+					table.insert(connectionTable, conn)
+					return #connectionTable, packetType, string.match(message, ";(.*)"), dist
+				end
+			end
+		end
+	end
+end
+
+function listenIdle ()
+	local routeNum, packetType, message, dist = coroutine.yield()
+	if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
+	if routeNum == 0 and packetType == "instruction" then return routeNum, packetType, message end
+	for cNum, cInfo in pairs(connectionTable) do
+		if cInfo.route == routeNum then return cNum, packetType, message, dist end
+	end
+	local conn = {}
+	conn.route = routeNum
+	conn.name = net.nameFromRoute(routeNum)
+	table.insert(connectionTable, conn)
+	return #connectionTable, packetType, message, dist
+end
+
+function send (conn, messType, message)
+	if not connectionTable[conn] then return false end
+	if connectionTable[conn].server then message = connectionTable[conn].server..";"..message end
+	local packetType = ""
+	if pTypeLookup[messType] then packetType = pTypeLookup[messType] else return false end
+	return net.packet_send(packetType, connectionTable[conn].route, message)
+end
+
+function broadcast (messType, message, server)
+	if message == nil then return false end
+	if server ~= nil then message = server..";"..message end
+	if pTypeLookup[messType] then packetType = pTypeLookup[messType] else return false end
+	rednet.broadcast(packetType..":"..message)
+end
+
+function awaitResponse (conn, time)
+	local listenTimeOut = nil
+	local messRecv = false
+	if time then listenTimeOut = os.startTimer(time) end
+	while true do
+		local event, p1, p2, p3 = os.pullEvent()
+		if event == "timer" and p1 == listenTimeOut then
+			return false
+		elseif event == "rednet_message" then
+			local routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+			if routeNum then
+				if connectionTable[conn].route == routeNum then
+					if connectionTable[conn].service then message = string.match(message, ";(.*)") end
+					if packetType == "SP" or packetType == "SB" or packetType == "SC" or packetType == "FH" or packetType == "FD" or packetType == "FE" then
+						return pTypeLookup[packetType], message, dist
+					end
+				end 
+			end
+		end
+	end
+end
+
+function lessResponse(time)
+	local listenTimeOut = nil
+	local messRecv = false
+	if time then listenTimeOut = os.startTimer(time) end
+	while true do
+		local event, p1, p2, p3 = os.pullEvent()
+		if event == "timer" and p1 == listenTimeOut then
+			return false
+		elseif event == "rednet_message" then
+			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+			if routeNum then
+				if packetType == "SP" or packetType == "SB" or packetType == "SC" or packetType == "FH" or packetType == "FD" or packetType == "FE" then
+					return pTypeLookup[packetType], message, dist
+				end
+			end
+		end
+	end
+end
+
+local function listenOnRoute (route, time)
+	local listenTimeOut = nil
+	local messRecv = false
+	if not time then return false end
+	listenTimeOut = os.startTimer(time)
+	while not messRecv do
+		local event, p1, p2, p3 = os.pullEvent()
+		if event == "timer" and p1 == listenTimeOut then
+			return false
+		elseif event == "rednet_message" then
+			routeNum, packetType, message = net.rednet_message(p1, p2, p3)
+			if routeNum == route then
+				messRecv = true
+			end
+		end
+	end
+	return packetType, message
+end
+
+function open (idString, serverName, timeout)
+	local routeNum
+	if string.sub(idString, 1, 2) == "i;" then
+		--connecting to raw ID.
+		routeNum = net.routeFromCID(string.sub(idString, 3))
+	elseif string.sub(idString, 1, 2) == "r;" then
+		--connecting to route ID.
+		routeNum = string.sub(idString, 3)
+	else
+		--try to look up a hostname.
+		routeNum = net.routeFromName(idString)
+	end
+	if routeNum then
+		net.packet_send("SQ", routeNum, serverName..";connect")
+		pType, mess = listenOnRoute(routeNum, timeout)
+		if not pType then return false end
+		if pType == "SR" then
+			local conn = {}
+			conn.route = routeNum
+			conn.name = net.nameFromRoute(routeNum)
+			conn.server = serverName
+			table.insert(connectionTable, conn)
+			if mess then
+				return #connectionTable, mess
+			else
+				return #connectionTable
+			end
+		end
+	end
+	return false
+end
+
+function close (conn, message, quiet)
+	if connectionTable[conn] then
+		if not quiet then
+			if message == nil then message = "disconnect" end
+			if connectionTable[conn].server ~= nil then message = connectionTable[conn].server..";"..message end
+			net.packet_send("SC", connectionTable[conn].route, message)
+		end
+		connectionTable[conn] = nil
+		return true
+	end
+	return false
+end
+
+function isTurtle (conn)
+	if connectionTable[conn] and net.routeTable[connectionTable[conn].route].type == "T" then return true else return false end
+end
+
+function name (conn)
+	if connectionTable[conn] then
+		return connectionTable[conn].name
+	end
+	return false
+end
+
+function route (conn)
+	if connectionTable[conn] then
+		return connectionTable[conn].route
+	end
+	return false
+end

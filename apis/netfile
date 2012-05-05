@@ -1,0 +1,58 @@
+function get (conn, remoteFile, localFile, timeout)
+	connection.send(conn, "fileQuery", remoteFile)
+	return receive(conn, localFile, timeout)
+end
+
+function send (conn, localFile)
+	--have already gotten an FQ, need to just send the file now.
+	if fs.exists(localFile) then
+		connection.send(conn, "fileHeader", localFile)
+		local file = io.open( localFile, "r" )
+		local line = file:read()
+		while line do
+			connection.send(conn, "fileData", line)
+			line = file:read()
+		end
+		file:close()
+	else
+		connection.send(conn, "fileHeader", "fileNotFound")
+		return false
+	end
+	connection.send(conn, "fileEnd", "end")
+	return true
+end
+
+function put (conn, localFile, remoteFile, timeout)
+	if not fs.exists(localFile) then return false end
+	connection.send(conn, "fileSend", remoteFile)
+	messType, message = connection.awaitResponse(conn, timeout)
+	if messType ~= "fileResponse" or message ~= "ok" then return false end
+	return send(conn, localFile)
+end
+
+function receive (conn, lFile, timeout)
+	--already got an FS and replied, just catch the file header and data now.
+	local fileTable = {}
+	while true do
+		messType, message = connection.awaitResponse(conn, timeout)
+		if messType == "fileEnd" then
+			if lFile then file = io.open( lFile, "w" ) end
+			if file then
+				for i, line in ipairs( fileTable ) do
+					file:write( line .. "\n" )
+				end
+				file:close()
+				return true, header
+			else
+				if #fileTable == 0 then table.insert(fileTable, "") end
+				return fileTable, header
+			end
+		elseif messType == "fileHeader" then
+			header = message
+		elseif messType == "fileData" then
+			table.insert(fileTable, message)
+		elseif messType == false then
+			return false
+		end
+	end
+end

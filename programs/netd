@@ -1,0 +1,79 @@
+local function readHosts()
+	if fs.exists("/etc/hosts") then
+		local file = io.open("/etc/hosts", "r" )
+		local line = file:read()
+		while line do
+			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTR]) "), string.match(line, ";[CTR] (%w+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"))
+			line = file:read()
+		end
+		file:close()
+	elseif not fs.isDir("/etc") then
+		fs.makeDir("/etc")
+	end
+end
+
+local function saveHosts()
+	local file = io.open("/etc/hosts", "w" )
+	if file then
+		for rNum, rInfo in ipairs(net.routeTable) do
+			if rInfo then
+				file:write(rInfo.idNum..":"..rInfo.gateway..","..rInfo.cost..";"..rInfo.type.." "..rInfo.name.."\n")
+			end
+		end
+		file:close()
+		return true
+	end
+	return false
+end
+
+function netDaemon ()
+	netdExit = false
+	readHosts()
+	while not netdExit do
+		id, packet = coroutine.yield()
+		packetType = string.sub(packet, 1, 2)
+		if packetType == "HA" then
+			net.add_route(id, string.match(packet, ":([CTR]) "), string.match(packet, ":[CTR] (%w+)"), 0, 0)
+			saveHosts()
+		elseif packetType == "HI" then
+			net.add_route(string.match(packet, "HI:(%d+):"), string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), string.match(packet, "%d+:(%d+),"), string.match(packet, ",(%d+);"))
+		elseif packetType == "HQ" then
+			if (string.match(packet, ":(%a);") == "n" and string.match(packet, ":%a;(%a+)") == os.getComputerLabel()) or (string.match(packet, ":(%a);") == "i" and string.match(packet, ":%a;(%d+)") == os.computerID()) then
+				label = os.getComputerLabel()
+				packet = "HA:"
+				if turtle then
+					packet = packet.."T "..label
+				else
+					if daemonTable.routed then
+						packet = packet.."R "..label
+					else
+						packet = packet.."C "..label
+					end
+				end
+				rednet.send(id, packet)
+			end
+		elseif packetType == "HR" then
+			local routeNum = net.routeFromCID(string.match(packet, ":(%d+)"))
+			if net.routeFromCID(hNum) then
+				net.remove_route(routeNum)
+				for cNum, cInfo in pairs(connection.connectionTable) do
+					if cInfo.route == routeNum then
+						connection.connectionTable[cNum] = false
+					end
+				end
+			end
+		elseif packetType == "HT" then
+			for s in string.gmatch(packet, "(%d+:%d+,%d+;[CTR] %w+)>") do
+				net.add_route(string.match(s, "(%d+):"), string.match(s, ";([CTR]) "), string.match(s, ";[CTR] (%w+)"), string.match(s, ":(%d+),"), string.match(s, ",(%d+);"))
+			end
+			saveHosts()
+		elseif packetType == "SI" then
+			if string.match(packet, ":(%w+)") == "stop" then
+				saveHosts()
+				netdExit = true
+			end
+		end
+	end
+end
+
+net.daemonAdd("netd", netDaemon)
