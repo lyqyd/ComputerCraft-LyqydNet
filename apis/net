@@ -160,7 +160,7 @@ end
 
 function rednet_message (id, message, dist)
 	local packetType = string.sub(message, 1, 2)
-	if packetType == "HA" or packetType == "HI" or packetType == "HR" or packetType == "HQ" or packetType == "HT" or packetType == "RA" or packetType == "RR" then
+	if packetType == "HA" or packetType == "HI" or packetType == "HR" or packetType == "HQ" or packetType == "HT" or packetType == "PS" or packetType == "RA" or packetType == "RR" then
 		if daemonTable.routed then
 			coroutine.resume(daemonTable.routed, id, message, dist)
 		elseif daemonTable.netd then

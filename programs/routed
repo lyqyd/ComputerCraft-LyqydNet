@@ -1,4 +1,14 @@
 function routeDaemon ()
+	local forwardTable = {}
+	if fs.exists( "etc/packets" ) then
+		local file = io.open( "etc/packets", "r" )
+		local sLine = file:read()
+		while sLine do
+			table.insert( forwardTable, {dest = string.match(sLine, "(%d+)>.*"), data = string.match(sLine, "%d+>(.*)") )
+			sLine = file:read()
+		end
+		file:close()
+	end
 	local routedExit = false
 	while not routedExit do
 		local id, packet = coroutine.yield()
@@ -16,6 +26,12 @@ function routeDaemon ()
 				if rInfo.type == "R" and rNum ~= newRoute then
 					string = net.routeTable[newRoute].idNum..":"..os.computerID()..","..(net.routeTable[newRoute].cost + 1)..";"..net.routeTable[newRoute].type.." "..net.routeTable[newRoute].name
 					net.packet_send("HI", rNum, string)
+				end
+			end
+			--if the computer coming online was a router that didn't respond to a forwarded packet, forward the packet again.
+			for pNum, pContents in ipairs(forwardTable) do
+				if pContents.dest == id then
+					rednet.send(id, pContents.data)
 				end
 			end
 		elseif packetType == "HI" then
@@ -51,23 +67,42 @@ function routeDaemon ()
 		elseif packetType == "PF" then
 			local destination = tonumber(string.match(packet, ":(%d+),%d+<"))
 			local routeFound = false
+			local oldPacket = packet
 			for rNum, rInfo in ipairs(net.routeTable) do
 				if rInfo.idNum == destination then
 					if rInfo.gateway ~= 0 then destination = rInfo.gateway end
 					if string.match(packet, "PF:%d+,%d+<(%a%a):") == "HI" then
 						--These are host information packets, we must manipulate them as we send them onward so that the routing information is accurate.
-						head, gateway, cost, tail = string.match(packet, "(PF:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+)")
+						local head, gateway, cost, tail = string.match(packet, "(PF:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+)")
 						gateway = os.computerID()
 						cost = cost + 1
 						packet = head..":"..gateway..","..cost..";"..tail
 					end
+					table.insert(forwardTable, {dest = destination, data = packet})
+					rednet.send(id, "PS:"..oldPacket)
 					rednet.send(destination, packet)
 					routeFound = true
 				end
 			end
 			if not routeFound then net.packet_send("RR", net.routeFromCID(id), string.match(packet, ":(%d+,%d+)<")..";not_found") end
+		elseif packetType == "PS" then
+			for pNum, pContents in ipairs(forwardTable) do
+				if pContents.data == string.match(packet, "PS:(.*)") then
+					table.remove(forwardTable, pNum)
+					break
+				end
+			end
 		elseif packetType == "SI" then
 			if string.match(packet, ":(%w+)") == "stop" then
+				if #forwardTable > 0 then
+					local file = io.open( "etc/packets", "w" )
+					if file then
+						for pNum, pContents in ipairs( forwardTable ) do
+							file:write( pContents.dest..">"..pContents.data.."\n" )
+						end
+						file:close()
+					end
+				end
 				routedExit = true
 			end
 		end
