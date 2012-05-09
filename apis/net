@@ -2,6 +2,7 @@ routeTable = {}
 daemonTable = {}
 
 function netInit ()
+	if fs.exists("modread") then shell.run("modread") end
 	local packet = "HA:"
 	local label = os.getComputerLabel()
 	if label then
