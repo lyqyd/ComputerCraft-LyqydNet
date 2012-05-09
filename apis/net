@@ -168,7 +168,7 @@ function rednet_message (id, message, dist)
 		else
 			return nil
 		end
-	elseif packetType == "PF" then
+	elseif packetType == "PF" or packetType == "PC" then
 		if tonumber(string.match(message, ":(%d+),%d+<")) == os.computerID() then
 			return rednet_message(string.match(message, ":%d+,(%d+)<"), string.match(message, "<(.*)>"), false)
 		elseif daemonTable.routed then

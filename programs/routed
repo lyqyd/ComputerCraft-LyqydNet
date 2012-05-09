@@ -9,6 +9,8 @@ function routeDaemon ()
 		end
 		file:close()
 	end
+	local longlink = false
+	--longlink is used for routers that need to cache and re-send packets until success, usually because the outbound router is often not loaded.
 	local routedExit = false
 	while not routedExit do
 		local id, packet = coroutine.yield()
@@ -64,22 +66,29 @@ function routeDaemon ()
 			for s in string.gmatch(packet, "(%d+:%d+,%d+;[CTR] %w+)>") do
 				net.add_route(string.match(s, "(%d+):"), string.match(s, ";([CTR]) "), string.match(s, ";[CTR] (%w+)"), string.match(s, ":(%d+),"), string.match(s, ",(%d+);"))
 			end
-		elseif packetType == "PF" then
+		elseif packetType == "PF" or packetType == "PC" then
 			local destination = tonumber(string.match(packet, ":(%d+),%d+<"))
 			local routeFound = false
 			local oldPacket = packet
 			for rNum, rInfo in ipairs(net.routeTable) do
 				if rInfo.idNum == destination then
 					if rInfo.gateway ~= 0 then destination = rInfo.gateway end
-					if string.match(packet, "PF:%d+,%d+<(%a%a):") == "HI" then
+					if string.match(packet, "P[FC]:%d+,%d+<(%a%a):") == "HI" then
 						--These are host information packets, we must manipulate them as we send them onward so that the routing information is accurate.
-						local head, gateway, cost, tail = string.match(packet, "(PF:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+)")
+						local head, gateway, cost, tail = string.match(packet, "(P[FC]:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+)")
 						gateway = os.computerID()
 						cost = cost + 1
 						packet = head..":"..gateway..","..cost..";"..tail
 					end
-					table.insert(forwardTable, {dest = destination, data = packet})
-					rednet.send(id, "PS:"..oldPacket)
+					if longlink then
+						packet = "PC"..string.match(packet, "P[FC](:.*)")
+						table.insert(forwardTable, {dest = destination, data = packet})
+					else
+						packet = "PF"..string.match(packet, "P[FC](:.*)")
+					end
+					if packetType == "PC" then
+						rednet.send(id, "PS:"..oldPacket)
+					end
 					rednet.send(destination, packet)
 					routeFound = true
 				end
@@ -93,7 +102,8 @@ function routeDaemon ()
 				end
 			end
 		elseif packetType == "SI" then
-			if string.match(packet, ":(%w+)") == "stop" then
+			local instruction = string.match(packet, ":(%w+)")
+			if instruction == "stop" then
 				if #forwardTable > 0 then
 					local file = io.open( "etc/packets", "w" )
 					if file then
@@ -104,6 +114,8 @@ function routeDaemon ()
 					end
 				end
 				routedExit = true
+			elseif instruction == "longlink" then
+				longlink = true
 			end
 		end
 	end
