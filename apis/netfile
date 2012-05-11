@@ -1,12 +1,12 @@
 function get (conn, remoteFile, localFile, timeout)
-	connection.send(conn, "fileQuery", remoteFile)
+	if not connection.send(conn, "fileQuery", remoteFile) then return false end
 	return receive(conn, localFile, timeout)
 end
 
 function send (conn, localFile)
 	--have already gotten an FQ, need to just send the file now.
 	if fs.exists(localFile) then
-		connection.send(conn, "fileHeader", localFile)
+		if not connection.send(conn, "fileHeader", localFile) then return false end
 		local file = io.open( localFile, "r" )
 		local line = file:read()
 		while line do
@@ -24,7 +24,7 @@ end
 
 function put (conn, localFile, remoteFile, timeout)
 	if not fs.exists(localFile) then return false end
-	connection.send(conn, "fileSend", remoteFile)
+	if not connection.send(conn, "fileSend", remoteFile) then return false end
 	messType, message = connection.awaitResponse(conn, timeout)
 	if messType ~= "fileResponse" or message ~= "ok" then return false end
 	return send(conn, localFile)
@@ -32,6 +32,7 @@ end
 
 function receive (conn, lFile, timeout)
 	--already got an FS and replied, just catch the file header and data now.
+	if not connection.connectionTable[conn] then return false end
 	local fileTable = {}
 	while true do
 		messType, message = connection.awaitResponse(conn, timeout)
