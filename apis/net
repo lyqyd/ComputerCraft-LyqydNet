@@ -153,7 +153,7 @@ function localprint (...)
 		y = h
 	end
 	term.setCursorPos(1, y)
-	term.write("> ")
+	term.write(shell.dir().."> ")
 	term.setCursorPos(x, y)
 	return lines
 end
