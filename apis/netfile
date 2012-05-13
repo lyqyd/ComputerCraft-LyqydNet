@@ -39,13 +39,13 @@ function receive (conn, lFile, timeout)
 		if messType == "fileEnd" then
 			if lFile then file = io.open( lFile, "w" ) end
 			if file then
+				if #fileTable == 0 then table.insert(fileTable, "") end
 				for i, line in ipairs( fileTable ) do
 					file:write( line .. "\n" )
 				end
 				file:close()
 				return true, header
 			else
-				if #fileTable == 0 then table.insert(fileTable, "") end
 				return fileTable, header
 			end
 		elseif messType == "fileHeader" then
