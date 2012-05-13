@@ -105,7 +105,8 @@ function awaitResponse (conn, time)
 			if routeNum then
 				if connectionTable[conn].route == routeNum then
 					if connectionTable[conn].service then message = string.match(message, ";(.*)") end
-					return pTypeLookup[packetType], message, dist
+					if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
+					return packetType, message, dist
 				end 
 			end
 		end
@@ -123,7 +124,8 @@ function lessResponse(time)
 		elseif event == "rednet_message" then
 			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
 			if routeNum then
-				return pTypeLookup[packetType], message, dist
+				if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
+				return packetType, message, dist
 			end
 		end
 	end
