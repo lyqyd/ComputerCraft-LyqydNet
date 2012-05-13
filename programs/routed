@@ -4,7 +4,7 @@ function routeDaemon ()
 		local file = io.open( "etc/packets", "r" )
 		local sLine = file:read()
 		while sLine do
-			table.insert( forwardTable, {dest = string.match(sLine, "(%d+)>.*"), data = string.match(sLine, "%d+>(.*)") )
+			table.insert(forwardTable, {dest = string.match(sLine, "(%d+)>.*"), data = string.match(sLine, "%d+>(.*)")})
 			sLine = file:read()
 		end
 		file:close()
