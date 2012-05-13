@@ -196,7 +196,11 @@ function close (conn, message, quiet)
 end
 
 function isTurtle (conn)
-	if connectionTable[conn] and net.routeTable[connectionTable[conn].route].type == "T" then return true else return false end
+	if connectionTable[conn] then
+		if net.routeTable[connectionTable[conn].route].type == "T" then return true else return false end
+	else
+		return nil
+	end
 end
 
 function name (conn)
