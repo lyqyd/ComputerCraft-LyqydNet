@@ -1,0 +1,536 @@
+LyqydNet APIs:
+
+1 - Setup
+
+To install, simply copy the files to their appropriate directories.
+
+2 - APIs
+
+2.1 - Connection API
+
+The connection API is the application-layer rednet interface in
+LyqydNet. It provides an easy way to set up client-server applications
+rapidly and with minimal effort. This layer abstracts away most tech-
+nical aspects of formatting and delivering rednet packets so that the
+small details are gotten out of the developer's way.
+
+2.1.1 - connection.open()
+
+The open function takes three arguments; a computer identification
+string, a server identifier, and a timeout duration. To connect to a
+computer named "fileserver" running the "filed" program, for example,
+one would call:
+
+serverConnection = connection.open("fileserver", "filed", 2)
+
+This will send a packet to the computer specified, requesting to connect
+to the server. If a server is available there, it will respond. If a
+response is received before the timeout has expired, open() will create
+the connection information and return a connection number. This con-
+nection number will then be used in all communication between client and
+server.
+
+2.1.2 - connection.send()
+
+The send function takes three arguments; a connection number, a message
+type, and a message to send. Most communications to a server are sent
+using the "data" message type. For example,
+
+connection.send(serverConnection, "data", "Hello, Server!")
+
+2.1.3 - connection.close()
+
+The close function takes three arguments; a connection number, an
+optional message, and an optional 'quiet' value. If no message is pro-
+vided, the message "disconnect" will automatically be used. If the quiet
+option is true, no closing packet will be send to the connection.
+Normally, one would use the close function in quiet mode after receiving
+a connection close message from a client computer. An example of a
+client disconnecting:
+
+connection.close(serverConnection)
+
+2.1.4 - connection.awaitResponse()
+
+The awaitResponse function takes two arguments; a connection to listen
+for a response on and a timeout duration. If no response is received
+before the timer runs out, awaitResponse returns false. Otherwise, it
+returns the message type and message received on the connection, as well
+as the distance from the sender (if the packet was not forwarded from a
+router in between). An example of a real use for awaitResponse:
+
+local messageType, message = nil, nil
+while messageType ~= "done" do
+	messageType, message = connection.awaitResponse(serverConnection)
+	if messageType == "close" then
+		print("Connection closed by server.")
+		return
+	elseif messageType == "data" then
+		print("Server sent: "..message)
+	else
+	end
+end
+
+2.1.5 - connection.lessResponse()
+
+Read as "connectionless response", this close cousin of awaitResponse()
+does just that--listens for any sort of response. This is used for
+things such as a GPS implementation, where multiple responses to a
+single query must be gathered and processed. This function returns the
+same as awaitResponse does. It does not return any information about
+the origin of the response packets (aside from the distance, of course).
+
+2.1.6 - connection.broadcast()
+
+The broadcast function takes three arguments; a message type, a message,
+and an optional server string (identical to the server identifier used
+in connection.open()). It will broadcast the assembled packet to all
+computers in range.  For example:
+
+connection.broadcast("query", "connect", "gpsd")
+
+2.1.7 - connection.listen()
+
+The listen function is used by foreground servers (the computer is only
+running the server) to listen for incoming packets and connections. It
+takes two arguments; the server identifier and an optional timeout dur-
+ation.  The server identifier provided to this call is used to check
+incoming connection requests (from connection.open()), so it is
+imperative that they match. The listen function returns a connection
+number, a message type, and a message. For example, a file server might
+use:
+
+clientConnection, messageType, message = connection.listen("filed")
+
+2.1.8 - connection.listenIdle()
+
+The listenIdle function is used by background servers (a separate co-
+routine resumed as necessary based on network traffic). The listenIdle
+function is mostly a wrapper for the coroutine.yield() function. See
+2.2.13 for more information on how data is given to background servers.
+The listenIdle function returns exactly the same information as the
+listen function; a connection number, a message type, and a message.
+
+2.1.9 - connection.isTurtle()
+
+The isTurtle function takes only one argument; a connection number. It
+returns true if the computer the connection refers to is a turtle, false
+if it isn't, and nil if the connection number isn't currently valid.
+
+2.1.10 - connection.name()
+
+The name function is very similar to the isTurtle function; it takes a
+single argument (a connection number) and returns false if it is not a
+valid connection number, otherwise it returns the name of the computer.
+
+2.1.11 - connection.route()
+
+The route function is identical to the name function, except that it
+returns the route number of the computer if a valid connection number is
+provided.
+
+2.2 - Net API
+
+The Net API is the layer that the connection API is built on. This layer
+handles the sending and receiving of packets, as well as delivering them
+to the running server applications, network daemons and client programs.
+Full documentation is provided, but many functions of this API are
+intended for use only by other APIs.
+
+2.2.1 - net.netInit()
+
+This function takes no arguments. The netInit function is crucial to the
+LyqydNet system. It must be called in startup on every computer that
+will be on the network. This makes it discoverable to routers and other
+computers on the network. Each computer must be labeled before it can be
+added to the network. Computer labels are used as hostnames. This
+function sends out basic information about the computer in a broadcast.
+
+2.2.2 - net.daemonAdd()
+
+This function takes two arguments; a daemon name and a function. The
+function is used to create a coroutine which will be resumed every time
+a packet is received for the daemon. Daemons are background servers.
+The daemon name will be used as the server identifier (see 2.1.1).
+
+2.2.3 - net.daemonRemove()
+
+This function removes a daemon from the daemon table, so that it can no
+longer receive packets. It takes one argument; the daemon name. If the
+daemon was present, this function returns true; otherwise, it returns
+false.
+
+2.2.4 - net.routeFromName()
+
+This function takes the name of a computer as an argument and returns
+the route number associated with it.
+
+2.2.5 - net.routeFromCID()
+
+This function takes the ID number of a computer as an argument and
+returns the route number associated with it.
+
+2.2.6 - net.nameFromRoute()
+
+This function takes a route number as an argument and returns the name
+of the computer associated with it.
+
+2.2.7 - CIDFromRoute()
+
+This function takes a route number as an argument and returns the ID of
+the computer associated with it.
+
+2.2.8 - net.packet_send()
+
+This function takes a packet type, a route number, and a message and
+sends a packet. Use (2.1.2) connection.send() instead.
+
+2.2.9 - net.packet_receive()
+
+This function takes an ID number and a raw packet and returns a route
+number, a packet type, and the packet data. Use one of the listening
+functions in the connection API instead (2.1.4, 2.1.5, 2.1.7, 2.1.8)
+
+2.2.10 - net.add_route()
+
+This function takes an ID number, computer type, computer name, gateway
+and cost and adds a route to the route table. Do not manually call this
+function.
+
+2.2.11 - net.remove_route()
+
+This function takes a route number and removes it from the routing table
+and the hosts file. Do not manually call this function.
+
+2.2.12 - net.localprint()
+
+Wraps the print function so that background servers can write text to
+the screen (using print() only!) without mangling the command-line if it
+is in use. This function is automatically called instead of the default
+print() when called inside a background server, so they may use print()
+as normal and it will "just work".
+
+2.2.13 - net.rednet_message()
+
+A direct handler for the rednet_message event.  This function is passed
+the id, packet, and distance given by the rednet_message event from
+os.pullEvent(). Forwarded packets are automatically processed (unwrapped
+from encapsulation if they have reached the destination, otherwise sent
+to routed (the routing daemon) if it is running), packets with network
+information are sent to either the routing daemon or the network daemon.
+Packets intended for servers are checked against the list of running
+background servers. All other packets are simply returned in route
+number, packet type, packet data format.
+
+This function is how packets get to individual programs correctly. A
+computer could theoretically be running many servers, and as long as all
+of them were written properly, there would be no problems with packets
+being misdelivered. Background servers should NEVER wait for packets
+any other way than coroutine.yield(). They must use their own variables
+to remember any state information they need to keep track of, so they
+do not interfere with other background servers.
+
+Foreground servers will receive packets being returned by rednet_message
+whether they are intended for the server or not, so the connection API
+is used to filter out those wayward packets.
+
+2.3 - Net File API
+
+The netfile API is used to greatly simplify the exchange of files across
+the LyqydNet network.
+
+2.3.1 - netfile.get()
+
+The get function takes four arguments; a connection number, a remote
+file to get, a local file to save the remote file to, and a timeout. If
+the connection number refers to a connection that doesn't exist, it will
+return false. Otherwise, it will request the file and then return with a
+call to netfile.receive(). See 2.3.2 in regards to using this in a
+server application.
+
+2.3.2 - netfile.receive()
+
+The receive function takes three arguments; a connection number, a local
+file to save the incoming data to, and a timeout. It will return false
+if the connection number refers to a connection that doesn't exist, or
+if it times out before the file is received. Otherwise, it will return
+the file header (contains the name of the remote file).
+
+Only foreground servers should use netfile.receive() (and netfile.get(),
+since it uses netfile.receive()) for reasons discussed in 2.2.13. Since
+they wait for packets without using coroutine.yield, they will not work
+properly (or at all) in background servers. Background servers wishing
+to receive files should instead catch the fileData message type (saving
+each line to a table) and the fileEnd message type (write the table to
+the file).
+
+2.3.3 - netfile.put()
+
+The put function takes four arguments; a connection number, a local file
+to send, a remote file location to save it to, and a timeout duration.
+It sends a packet requesting to upload the file and awaits a response.
+If a response allowing the upload is received before the timeout, the
+function calls netfile.send() to send the file and returns whatever send
+returns. If the local file doesn't exist, or the connection doesn't
+exist, or if a bad response is received, put() will return false.
+
+2.3.4 - netfile.send()
+
+The send function takes two arguments; a connection number and a local
+file to send. If the connection number refers to a connection that does
+not exist, or if the local file does not exist, send() will return
+false. Otherwise, it will send a file header packet containing the local
+name of the file, the file data one line per packet, and finally a file
+end packet. It will then return true.
+
+3 - Programs
+
+3.1 - modread
+
+This program modifies read() so that it will utilize incoming rednet
+messages. It also adds the use of the Home, End and Delete keys for the
+command line. This program should be run at startup before everything
+else.
+
+shell.run("modread")
+
+3.2 - netd
+
+This program is the network daemon. It establishes and maintains the
+routing table and responds to network information packets. This program
+should be run second. It will automatically establish the network daemon
+in the daemon table.
+
+shell.run("netd")
+
+3.3 - routed
+
+This program is the routing daemon. It maintains lists of hosts and is
+the backbone of the network. Each router will forward packets onto other
+routers, using the most efficient known route to pass packets on to
+their destinations. Routers are used to create networks larger than the
+maximum rednet transmission distance by repeating packets onward.
+
+They send the list of hosts on the network to computers joining the
+network. New hosts will then direct all of their traffic through the
+router until they discover shorter routes (peer connections cannot be
+made until the first peer has rebooted; this is to minimize lag).
+
+Routers can be made to work across great distances by using the longlink
+instruction. Longlink routers will hold onto packets forwarded through
+them until the next router confirms receipt of the packet. As the chain
+of routers is walked past, each router in line comes online. When a
+router comes online, longlink routers check whether there are any
+packets waiting to be sent to it for forwarding. If so, all packets for
+it are sent onward.
+
+This process repeats all the way across the usually-unloaded chunks to
+the other end of the network. Longlink is not the default behavior for
+routers because it causes twice the packets to be sent each time (one
+for data, one for confirmation). Routers that are normally in range of
+each other should not be longlink routers.
+
+The routing daemon should be started immediately after the network
+daemon, if the computer will be a router.
+
+shell.run("routed")
+
+To make a router a longlink, router, send it an instruction:
+
+coroutine.resume(net.daemonTable.routed, 0, "SI:longlink")
+
+3.4 - net.netInit()
+
+This isn't actually a program, but merely an API call. This call should
+be made in startup only after modread, netd and, if applicable, routed
+have already been started.
+
+3.5 - netmon
+
+Netmon is a network monitoring utility. It is relatively unpolished and
+can easily temporarily break a computer if used incorrectly. It will
+sometimes interfere with proper packet processing. Try running:
+
+netmon start
+
+on a router that handles a lot of traffic. You'll get to see your
+network humming along!
+
+4 - Examples
+
+4.1 - Example Foreground Server
+
+------------------------------------------------------------------------
+local connections = {}
+
+while true do
+	--wait for input from client connections.
+	conn, messType, message = connection.listen("server")
+	--okay, we have a packet, see if the connection is one we already
+	--know about.
+	if connections[conn] and connections[conn].status == "open" then
+		--we can use additional entries in our 'connections' table
+		--(which is internal to the server app) to store information
+		--about client state, among other things.
+		if messType == "data" then
+			--handle client input here; use the connection number in
+			--'conn' to send data back.
+			connection.send(conn, "break", "OK")
+			--break packet tells the client we are done transmitting
+			--and are ready for the next command.
+		elseif messType == "close" then
+			--client has closed the connection, so let's close out
+			--the connection information.
+			connection.close(conn, disconnect, true)
+			connections[conn].status = "closed"
+			connections[conn].name = nil
+		elseif messType == "instruction" then
+			--these are local instructions. Often unused.
+			if message == "stop" then
+				return true
+			end
+		end
+	elseif messType == "query" then
+		--a client wants to open a connection
+		if connections[conn] then
+			--already have an entry for that connection number,
+			--reset the information
+			connections[conn].status = open
+			connections[conn].name = connection.name(conn)
+		else
+			--no entry for this connection number, set up a new
+			--entry.
+			local connect = {}
+			connect.status = "open"
+			connect.name = connection.name(conn)
+			table.insert(connections, conn, connect)
+		end
+		--either way we set up the connection, let the client know
+		--it was successful.
+		connection.send(conn, "response", "ok")
+	end
+end
+------------------------------------------------------------------------
+
+4.2 - Example background server
+
+Note that this example is very similar to the previous example, the
+foreground server. The critical difference here is that we use
+connection.listenIdle() to get packets (which uses coroutine.yield). We
+also declare the server as a function, and then use net.daemonAdd to add
+it to the daemon table.  Please note that the daemon name, "server" is
+the same as the server identifier in the previous example, which is in
+the connection.listen() call.
+
+------------------------------------------------------------------------
+local connections = {}
+
+function serverFunction ()
+	while true do
+		--wait for input from client connections.
+		conn, messType, message = connection.listenIdle()
+		--okay, we have a packet, see if the connection is one we
+		--already know about.
+		if connections[conn] and connections[conn].status == "open" then
+			--we can use additional entries in our 'connections' table
+			--(which is internal to the server app) to store information
+			--about client state, among other things.
+			if messType == "data" then
+				--handle client input here; use the connection number in
+				--'conn' to send data back.
+				connection.send(conn, "break", "OK")
+				--break packet tells the client we are done transmitting
+				--and are ready for the next command.
+			elseif messType == "close" then
+				--client has closed the connection, so let's close out
+				--the connection information.
+				connection.close(conn, disconnect, true)
+				connections[conn].status = "closed"
+				connections[conn].name = nil
+			elseif messType == "instruction" then
+				--these are local instructions. Often unused.
+				if message == "stop" then
+					return true
+				end
+			end
+		elseif messType == "query" then
+			--a client wants to open a connection
+			if connections[conn] then
+				--already have an entry for that connection number,
+				--reset the information
+				connections[conn].status = open
+				connections[conn].name = connection.name(conn)
+			else
+				--no entry for this connection number, set up a new
+				--entry.
+				local connect = {}
+				connect.status = "open"
+				connect.name = connection.name(conn)
+				table.insert(connections, conn, connect)
+			end
+			--either way we set up the connection, let the client know
+			--it was successful.
+			connection.send(conn, "response", "ok")
+		end
+	end
+end
+
+net.addDaemon("server", serverFunction)
+------------------------------------------------------------------------
+
+4.3 - Example Client
+
+This client would, when run, open a command prompt. The command open,
+with a server name, would open a connection to a server. The command
+close would close the connection. The exit command would close the
+connection if one was open, then exit the program. All other text would
+be sent directly to the server application.
+
+------------------------------------------------------------------------
+local tHistory = {}
+local serverConnection = false
+while true do
+	write("client> ")
+	local sLine = read(nil, tHistory)
+	table.insert( tHistory, sLine )
+	local commandArgs = {}
+	for match in string.gmatch(sLine, "[^ \t]+") do
+		table.insert( commandArgs, match )
+	end
+	if commandArgs[1] == "open" then
+		if commandArgs[2] then
+			serverConnection, remoteDir = connection.open(commandArgs[2], "server", 2)
+			if not serverConnection then
+				print("Connection Failed!")
+			else
+				print("Connected to "..commandArgs[2]..".")
+			end
+		else
+			print("No server specified!")
+		end
+	elseif commandArgs[1] == "close" then
+		if connection.close(serverConnection) then
+			serverConnection = false
+			print("Connection Closed.")
+		else
+			print("Could not close connection!")
+		end
+	elseif commandArgs[1] == "exit" then
+		if serverConnection then connection.close(serverConnection) end
+		return
+	else
+		connection.send(serverConnection, "data", sLine)
+		local messageType, message = nil, nil
+		while messageType ~= "done" do
+			messageType, message = connection.awaitResponse(serverConnection)
+			if messageType == "close" then
+				print("Connection closed by server.")
+				return
+			elseif messageType == "data" then
+				print("Server sent: "..message)
+			else
+			end
+		end
+	end
+end
+------------------------------------------------------------------------
