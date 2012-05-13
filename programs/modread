@@ -117,7 +117,7 @@ function newread( _sReplaceChar, _tHistory )
 		elseif sEvent == "rednet_message" then
 			net.rednet_message(param, param2, param3)
 			foo, sy = term.getCursorPos()
-			if shell.getRunningProgram() == "rom/programs/shell" then
+			if shell.getRunningProgram() == nil then
 				term.setCursorPos(1, sy)
 				term.write(shell.dir().."> ")
 				term.setCursorPos(foo, sy)
