@@ -168,6 +168,7 @@ function rednet_message (id, message, dist)
 		end
 	elseif packetType == "PF" or packetType == "PC" then
 		if tonumber(string.match(message, ":(%d+),%d+<")) == os.computerID() then
+			if packetType == "PC" then packet_send("PS", routeFromCID(id), message) end
 			return rednet_message(string.match(message, ":%d+,(%d+)<"), string.match(message, "<(.*)>"), false)
 		elseif daemonTable.routed then
 			coroutine.resume(daemonTable.routed, id, message)
