@@ -105,9 +105,7 @@ function awaitResponse (conn, time)
 			if routeNum then
 				if connectionTable[conn].route == routeNum then
 					if connectionTable[conn].service then message = string.match(message, ";(.*)") end
-					if packetType == "SP" or packetType == "SB" or packetType == "SC" or packetType == "FH" or packetType == "FD" or packetType == "FE" then
-						return pTypeLookup[packetType], message, dist
-					end
+					return pTypeLookup[packetType], message, dist
 				end 
 			end
 		end
@@ -125,9 +123,7 @@ function lessResponse(time)
 		elseif event == "rednet_message" then
 			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
 			if routeNum then
-				if packetType == "SP" or packetType == "SB" or packetType == "SC" or packetType == "FH" or packetType == "FD" or packetType == "FE" then
-					return pTypeLookup[packetType], message, dist
-				end
+				return pTypeLookup[packetType], message, dist
 			end
 		end
 	end
@@ -186,7 +182,7 @@ end
 
 function close (conn, message, quiet)
 	if connectionTable[conn] then
-		if not quiet then
+		if quiet ~= true then
 			if message == nil then message = "disconnect" end
 			if connectionTable[conn].server ~= nil then message = connectionTable[conn].server..";"..message end
 			net.packet_send("SC", connectionTable[conn].route, message)
