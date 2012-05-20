@@ -4,6 +4,20 @@ LyqydNet APIs:
 
 To install, simply copy the files to their appropriate directories.
 
+Each computer that you want to be on the network should have this added
+to its startup (see 3.1 - 3.4 for more information):
+
+shell.run("modread")
+shell.run("netd")
+net.netInit()
+
+Routers need an additional line:
+
+shell.run("modread")
+shell.run("netd")
+shell.run("routed")
+net.netInit()
+
 2 - APIs
 
 2.1 - Connection API
