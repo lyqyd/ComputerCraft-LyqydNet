@@ -1,0 +1,4 @@
+coroutine.resume(net.daemonTable.netd, 0, "SI:stop")
+print( "Goodbye" )
+sleep( 1 )
+os.reboot()
