@@ -75,7 +75,7 @@ function routeDaemon ()
 					if rInfo.gateway ~= 0 then destination = rInfo.gateway end
 					if string.match(packet, "P[FC]:%d+,%d+<(%a%a):") == "HI" then
 						--These are host information packets, we must manipulate them as we send them onward so that the routing information is accurate.
-						local head, gateway, cost, tail = string.match(packet, "(P[FC]:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+)")
+						local head, gateway, cost, tail = string.match(packet, "(P[FC]:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+>)")
 						gateway = os.computerID()
 						cost = cost + 1
 						packet = head..":"..gateway..","..cost..";"..tail
