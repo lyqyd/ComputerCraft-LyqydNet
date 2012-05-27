@@ -177,6 +177,10 @@ function rednet_message (id, message, dist)
 		end
 	else
 		local routeNum, packetType, message = packet_receive(id, message)
+		if routeTable[routeNum].gateway ~= 0 and dist then
+			routeTable[routeNum].gateway = 0
+			routeTable[routeNum].cost = 0
+		end
 		local daemonName = string.match(message, "(%a+);")
 		if type(daemonTable[daemonName]) == "thread" then
 			oldprint = print
