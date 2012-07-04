@@ -1,12 +1,13 @@
 routeTable = {}
 daemonTable = {}
+socketTable = {}
 
 function netInit ()
 	local packet = "HA:"
 	local label = os.getComputerLabel()
 	if label then
 		if turtle then
-			packet = packet.."T "..label
+		packet = packet.."T "..label
 		else
 			if daemonTable.routed then
 				packet = packet.."R "..label
@@ -27,13 +28,19 @@ function netInit ()
 	return false
 end
 
-function daemonAdd (dName, dFunction)
+function daemonAdd (dName, dFunction, socket)
+	if socket then socketTable[socket] = dName end
 	daemonTable[dName] = coroutine.create(dFunction)
 	coroutine.resume(daemonTable[dName], 0, "SI", "start")
 end
 
 function daemonRemove (dName)
 	if daemonTable[dName] then
+		for sNum, sInfo in pairs(socketTable) do
+			if sInfo == dName then
+				sNum = nil
+			end
+		end
 		daemonTable[dName] = nil
 		return true
 	else
@@ -122,7 +129,7 @@ function add_route (idNumber, compType, compName, gateway, cost)
 	route.name = compName
 	route.gateway = gateway
 	route.cost = cost
-	table.insert(routeTable, route) 
+	table.insert(routeTable, route)
 	return #routeTable
 end
 
@@ -158,20 +165,12 @@ end
 
 function rednet_message (id, message, dist)
 	if message then local packetType = string.sub(message, 1, 2) else return false end
-	if packetType == "HA" or packetType == "HI" or packetType == "HR" or packetType == "HQ" or packetType == "HT" or packetType == "PS" or packetType == "RA" or packetType == "RR" then
-		if daemonTable.routed then
-			coroutine.resume(daemonTable.routed, id, message, dist)
-		elseif daemonTable.netd then
-			coroutine.resume(daemonTable.netd, id, message, dist)
-		else
-			return nil
-		end
-	elseif packetType == "PF" or packetType == "PC" then
+	if packetType == "PF" or packetType == "PC" then
 		if tonumber(string.match(message, ":(%d+),%d+<")) == os.computerID() then
 			if packetType == "PC" then packet_send("PS", routeFromCID(id), message) end
 			return rednet_message(string.match(message, ":%d+,(%d+)<"), string.match(message, "<(.*)>"), false)
-		elseif daemonTable.routed then
-			coroutine.resume(daemonTable.routed, id, message)
+		elseif socketTable[4] then
+			coroutine.resume(daemonTable.[socketTable[4]], id, message)
 		else
 			return false
 		end
@@ -181,15 +180,15 @@ function rednet_message (id, message, dist)
 			routeTable[routeNum].gateway = 0
 			routeTable[routeNum].cost = 0
 		end
-		local daemonName = string.match(message, "(%a+);")
-		if type(daemonTable[daemonName]) == "thread" then
+		local dest_socket = tonumber(string.match(message, "^(%d+),%d+;"))
+		if dest_socket and type(daemonTable[socketTable[dest_socket]]) == "thread" then
 			oldprint = print
 			print = localprint
-			coroutine.resume(daemonTable[daemonName], routeNum, packetType, string.match(message, ";(.*)"), dist)
+			coroutine.resume(daemonTable[socketTable[dest_socket]], routeNum, packetType, message, dist)
 			print = oldprint
 			return nil
 		else
 			return routeNum, packetType, message, dist
 		end
-	end	
+	end
 end
