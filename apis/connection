@@ -1,43 +1,44 @@
 connectionTable = {}
-local pTypeLookup = {}
-pTypeLookup.query = "SQ"
-pTypeLookup.response = "SR"
-pTypeLookup.data = "SP"
-pTypeLookup.done = "SB"
-pTypeLookup.close = "SC"
-pTypeLookup.fileQuery = "FQ"
-pTypeLookup.fileSend = "FS"
-pTypeLookup.fileResponse = "FR"
-pTypeLookup.fileHeader = "FH"
-pTypeLookup.fileData = "FD"
-pTypeLookup.fileEnd = "FE"
-pTypeLookup.fileCopy = "FC"
-pTypeLookup.fileDelete = "FM"
-pTypeLookup.fileMove = "FV"
-pTypeLookup.fileMakeDirectory = "FK"
-pTypeLookup.fileList = "FL"
-pTypeLookup.fileInformation = "FI"
-pTypeLookup.instruction = "SI"
-pTypeLookup.SQ = "query"
-pTypeLookup.SR = "response"
-pTypeLookup.SP = "data"
-pTypeLookup.SB = "done"
-pTypeLookup.SC = "close"
-pTypeLookup.FQ = "fileQuery"
-pTypeLookup.FS = "fileSend"
-pTypeLookup.FR = "fileResponse"
-pTypeLookup.FH = "fileHeader"
-pTypeLookup.FD = "fileData"
-pTypeLookup.FE = "fileEnd"
-pTypeLookup.FC = "fileCopy"
-pTypeLookup.FM = "fileDelete"
-pTypeLookup.FV = "fileMove"
-pTypeLookup.FK = "fileMakeDirectory"
-pTypeLookup.FL = "fileList"
-pTypeLookup.FI = "fileInformation"
-pTypeLookup.SI = "instruction"
+local pTypeLookup = {
+	pTypeLookup.query = "SQ",
+	pTypeLookup.response = "SR",
+	pTypeLookup.data = "SP",
+	pTypeLookup.done = "SB",
+	pTypeLookup.close = "SC",
+	pTypeLookup.fileQuery = "FQ",
+	pTypeLookup.fileSend = "FS",
+	pTypeLookup.fileResponse = "FR",
+	pTypeLookup.fileHeader = "FH",
+	pTypeLookup.fileData = "FD",
+	pTypeLookup.fileEnd = "FE",
+	pTypeLookup.fileCopy = "FC",
+	pTypeLookup.fileDelete = "FM",
+	pTypeLookup.fileMove = "FV",
+	pTypeLookup.fileMakeDirectory = "FK",
+	pTypeLookup.fileList = "FL",
+	pTypeLookup.fileInformation = "FI",
+	pTypeLookup.instruction = "SI",
+	pTypeLookup.SQ = "query",
+	pTypeLookup.SR = "response",
+	pTypeLookup.SP = "data",
+	pTypeLookup.SB = "done",
+	pTypeLookup.SC = "close",
+	pTypeLookup.FQ = "fileQuery",
+	pTypeLookup.FS = "fileSend",
+	pTypeLookup.FR = "fileResponse",
+	pTypeLookup.FH = "fileHeader",
+	pTypeLookup.FD = "fileData",
+	pTypeLookup.FE = "fileEnd",
+	pTypeLookup.FC = "fileCopy",
+	pTypeLookup.FM = "fileDelete",
+	pTypeLookup.FV = "fileMove",
+	pTypeLookup.FK = "fileMakeDirectory",
+	pTypeLookup.FL = "fileList",
+	pTypeLookup.FI = "fileInformation",
+	pTypeLookup.SI = "instruction"
+}
 
-function listen (serviceName, time)
+function listen (port, time)
 	--used by foreground servers to wait for incoming packets.
 	local listenTimeOut = nil
 	if time then listenTimeOut = os.startTimer(time) end
@@ -49,14 +50,15 @@ function listen (serviceName, time)
 			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
 			if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 			if routeNum then
-				if serviceName == string.match(message, "(%a+);") then
+				if port == string.match(message, "^(%d+),%d+;") then
 					for cNum, cInfo in pairs(connectionTable) do
-						if cInfo.route == routeNum then return cNum, packetType, string.match(message, ";(.*)"), dist end
+						if cInfo.route == routeNum and cInfo.localport = port then return cNum, packetType, string.match(message, ";(.*)"), dist end
 					end
 					local conn = {}
 					conn.route = routeNum
 					conn.name = net.nameFromRoute(routeNum)
-					conn.service = serviceName
+					conn.localport = port
+					conn.foreignport = string.match(message, "^%d+,(%d+);")
 					table.insert(connectionTable, conn)
 					return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 				end
@@ -65,94 +67,82 @@ function listen (serviceName, time)
 	end
 end
 
-function listenIdle ()
+function listenIdle (port)
 	local routeNum, packetType, message, dist = coroutine.yield()
 	if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 	if routeNum == 0 and packetType == "instruction" then return routeNum, packetType, message end
 	for cNum, cInfo in pairs(connectionTable) do
-		if cInfo.route == routeNum then return cNum, packetType, message, dist end
+		if cInfo.route == routeNum and cInfo.localport == port then return cNum, packetType, string.match(message, ";(.*)"), dist end
 	end
 	local conn = {}
 	conn.route = routeNum
 	conn.name = net.nameFromRoute(routeNum)
+	conn.localport = port
+	conn.foreignport = string.match(message, "^%d+,(%d+);")
 	table.insert(connectionTable, conn)
-	return #connectionTable, packetType, message, dist
+	return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 end
 
 function send (conn, messType, message)
 	if not connectionTable[conn] then return false end
-	if connectionTable[conn].server then message = connectionTable[conn].server..";"..message end
 	local packetType = ""
 	if pTypeLookup[messType] then packetType = pTypeLookup[messType] else return false end
-	return net.packet_send(packetType, connectionTable[conn].route, message)
+	return net.packet_send(packetType, connectionTable[conn].route, connectionTable[conn].foreignport..","..connectionTable[conn].localport..";"..message)
 end
 
-function broadcast (messType, message, server)
+local function getPort()
+	local validPort = false
+	local portChoice = 51
+	while not validPort do
+		if net.socketTable[portChoice] then
+			portChoice = portChoice + 1
+		else
+			net.socketTable[portChoice] = true
+			validPort = true
+		end
+	end
+	return portChoice
+end
+
+function broadcast (messType, message, toPort)
 	if message == nil then return false end
-	if server ~= nil then message = server..";"..message end
 	if pTypeLookup[messType] then packetType = pTypeLookup[messType] else return false end
-	rednet.broadcast(packetType..":"..message)
+	local fromPort = getPort()
+	rednet.broadcast(packetType..":"..toPort..","..fromPort..";"..message)
+	return fromPort
 end
 
-function awaitResponse (conn, time)
+function lessResponse (port, time)
+	return listenOnPort(port, time)
+end
+
+local function listenOnPort (port, time)
 	local listenTimeOut = nil
 	local messRecv = false
 	if time then listenTimeOut = os.startTimer(time) end
-	while true do
-		local event, p1, p2, p3 = os.pullEvent()
-		if event == "timer" and p1 == listenTimeOut then
-			return false
-		elseif event == "rednet_message" then
-			local routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
-			if routeNum then
-				if connectionTable[conn].route == routeNum then
-					if connectionTable[conn].service then message = string.match(message, ";(.*)") end
-					if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
-					return packetType, message, dist
-				end 
-			end
-		end
-	end
-end
-
-function lessResponse(time)
-	local listenTimeOut = nil
-	local messRecv = false
-	if time then listenTimeOut = os.startTimer(time) end
-	while true do
-		local event, p1, p2, p3 = os.pullEvent()
-		if event == "timer" and p1 == listenTimeOut then
-			return false
-		elseif event == "rednet_message" then
-			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
-			if routeNum then
-				if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
-				return packetType, message, dist
-			end
-		end
-	end
-end
-
-local function listenOnRoute (route, time)
-	local listenTimeOut = nil
-	local messRecv = false
-	if not time then return false end
-	listenTimeOut = os.startTimer(time)
 	while not messRecv do
 		local event, p1, p2, p3 = os.pullEvent()
 		if event == "timer" and p1 == listenTimeOut then
 			return false
 		elseif event == "rednet_message" then
-			routeNum, packetType, message = net.rednet_message(p1, p2, p3)
-			if routeNum == route then
+			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+			if string.match(message, "^(%d+),") == port then
+				if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 				messRecv = true
 			end
 		end
 	end
-	return packetType, message
+	return packetType, message, dist
 end
 
-function open (idString, serverName, timeout)
+function awaitResponse (conn, time)
+	packetType, message, dist = listenOnPort(connection.localport, time)
+	if packetType then
+		return packetType, string.match(message, ";(.*)"), dist
+	end
+end
+
+function open (idString, serverPort, timeout)
 	local routeNum
 	if string.sub(idString, 1, 2) == "i;" then
 		--connecting to raw ID.
@@ -165,14 +155,16 @@ function open (idString, serverName, timeout)
 		routeNum = net.routeFromName(idString)
 	end
 	if routeNum then
-		net.packet_send("SQ", routeNum, serverName..";connect")
-		pType, mess = listenOnRoute(routeNum, timeout)
+		local portChoice = getPort()
+		net.packet_send("SQ", routeNum, serverPort..","..portChoice..";connect")
+		pType, mess = listenOnPort(portChoice, timeout)
 		if not pType then return false end
-		if pType == "SR" then
+		if pType == "response" then
 			local conn = {}
 			conn.route = routeNum
 			conn.name = net.nameFromRoute(routeNum)
-			conn.server = serverName
+			conn.localport = portChoice
+			conn.foreignport = serverPort
 			table.insert(connectionTable, conn)
 			if mess then
 				return #connectionTable, mess
@@ -191,6 +183,7 @@ function close (conn, message, quiet)
 			if connectionTable[conn].server ~= nil then message = connectionTable[conn].server..";"..message end
 			net.packet_send("SC", connectionTable[conn].route, message)
 		end
+		net.socketTable[connectionTable[conn].localport] = nil
 		connectionTable[conn] = nil
 		return true
 	end
