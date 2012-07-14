@@ -245,7 +245,8 @@ to remember any state information they need to keep track of, so they
 do not interfere with other background servers.
 
 Foreground servers will receive packets being returned by rednet_message
-whether they are intended for the server or not, so the connection API
+whether they are intended for the server or not (except, of course, for
+any packets sent to a running background server), so the connection API
 is used to filter out those wayward packets.
 
 2.3 - Net File API
