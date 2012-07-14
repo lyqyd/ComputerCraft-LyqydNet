@@ -1,3 +1,2 @@
-if net.daemonTable.routed then coroutine.resume(net.daemonTable.routed, 0, "SI:stop") end
 if net.daemonTable.netd then coroutine.resume(net.daemonTable.netd, 0, "SI:stop") end
 shell.exit()
