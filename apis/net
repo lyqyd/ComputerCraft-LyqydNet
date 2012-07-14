@@ -3,11 +3,12 @@ daemonTable = {}
 socketTable = {}
 
 function netInit ()
-	local packet = "HA:"
+	--initialize network communications
+	local packet = "HA:4,4;"
 	local label = os.getComputerLabel()
 	if label then
 		if turtle then
-		packet = packet.."T "..label
+			packet = packet.."T "..label
 		else
 			if daemonTable.routed then
 				packet = packet.."R "..label
@@ -29,7 +30,7 @@ function netInit ()
 end
 
 function daemonAdd (dName, dFunction, socket)
-	if socket then socketTable[socket] = dName end
+	if socket then socketTable[tonumber(socket)] = dName end
 	daemonTable[dName] = coroutine.create(dFunction)
 	coroutine.resume(daemonTable[dName], 0, "SI", "start")
 end
@@ -164,15 +165,20 @@ function localprint (...)
 end
 
 function rednet_message (id, message, dist)
-	if message then local packetType = string.sub(message, 1, 2) else return false end
+	local packetType = ""
+	if message then packetType = string.sub(message, 1, 2) else return false end
 	if packetType == "PF" or packetType == "PC" then
 		if tonumber(string.match(message, ":(%d+),%d+<")) == os.computerID() then
 			if packetType == "PC" then packet_send("PS", routeFromCID(id), message) end
 			return rednet_message(string.match(message, ":%d+,(%d+)<"), string.match(message, "<(.*)>"), false)
 		elseif socketTable[4] then
-			coroutine.resume(daemonTable.[socketTable[4]], id, message)
+			coroutine.resume(daemonTable[socketTable[4]], id, message)
 		else
 			return false
+		end
+	elseif packetType == "HA" then
+		if socketTable[4] then
+			coroutine.resume(daemonTable[socketTable[4]], id, message)
 		end
 	else
 		local routeNum, packetType, message = packet_receive(id, message)

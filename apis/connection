@@ -1,45 +1,64 @@
 connectionTable = {}
-local pTypeLookup = {
-	pTypeLookup.query = "SQ",
-	pTypeLookup.response = "SR",
-	pTypeLookup.data = "SP",
-	pTypeLookup.done = "SB",
-	pTypeLookup.close = "SC",
-	pTypeLookup.fileQuery = "FQ",
-	pTypeLookup.fileSend = "FS",
-	pTypeLookup.fileResponse = "FR",
-	pTypeLookup.fileHeader = "FH",
-	pTypeLookup.fileData = "FD",
-	pTypeLookup.fileEnd = "FE",
-	pTypeLookup.fileCopy = "FC",
-	pTypeLookup.fileDelete = "FM",
-	pTypeLookup.fileMove = "FV",
-	pTypeLookup.fileMakeDirectory = "FK",
-	pTypeLookup.fileList = "FL",
-	pTypeLookup.fileInformation = "FI",
-	pTypeLookup.instruction = "SI",
-	pTypeLookup.SQ = "query",
-	pTypeLookup.SR = "response",
-	pTypeLookup.SP = "data",
-	pTypeLookup.SB = "done",
-	pTypeLookup.SC = "close",
-	pTypeLookup.FQ = "fileQuery",
-	pTypeLookup.FS = "fileSend",
-	pTypeLookup.FR = "fileResponse",
-	pTypeLookup.FH = "fileHeader",
-	pTypeLookup.FD = "fileData",
-	pTypeLookup.FE = "fileEnd",
-	pTypeLookup.FC = "fileCopy",
-	pTypeLookup.FM = "fileDelete",
-	pTypeLookup.FV = "fileMove",
-	pTypeLookup.FK = "fileMakeDirectory",
-	pTypeLookup.FL = "fileList",
-	pTypeLookup.FI = "fileInformation",
-	pTypeLookup.SI = "instruction"
-}
+local pTypeLookup = {}
+pTypeLookup.query = "SQ"
+pTypeLookup.response = "SR"
+pTypeLookup.data = "SP"
+pTypeLookup.done = "SB"
+pTypeLookup.close = "SC"
+pTypeLookup.fileQuery = "FQ"
+pTypeLookup.fileSend = "FS"
+pTypeLookup.fileResponse = "FR"
+pTypeLookup.fileHeader = "FH"
+pTypeLookup.fileData = "FD"
+pTypeLookup.fileEnd = "FE"
+pTypeLookup.fileCopy = "FC"
+pTypeLookup.fileDelete = "FM"
+pTypeLookup.fileMove = "FV"
+pTypeLookup.fileMakeDirectory = "FK"
+pTypeLookup.fileList = "FL"
+pTypeLookup.fileInformation = "FI"
+pTypeLookup.textWrite = "TW"
+pTypeLookup.textCursorPos = "TC"
+pTypeLookup.textGetCursorPos = "TG"
+pTypeLookup.textGetSize = "TD"
+pTypeLookup.textInfo = "TI"
+pTypeLookup.textClear = "TE"
+pTypeLookup.textClearLine = "TL"
+pTypeLookup.textScroll = "TS"
+pTypeLookup.textBlink = "TB"
+pTypeLookup.instruction = "SI"
+pTypeLookup.SQ = "query"
+pTypeLookup.SR = "response"
+pTypeLookup.SP = "data"
+pTypeLookup.SB = "done"
+pTypeLookup.SC = "close"
+pTypeLookup.FQ = "fileQuery"
+pTypeLookup.FS = "fileSend"
+pTypeLookup.FR = "fileResponse"
+pTypeLookup.FH = "fileHeader"
+pTypeLookup.FD = "fileData"
+pTypeLookup.FE = "fileEnd"
+pTypeLookup.FC = "fileCopy"
+pTypeLookup.FM = "fileDelete"
+pTypeLookup.FV = "fileMove"
+pTypeLookup.FK = "fileMakeDirectory"
+pTypeLookup.FL = "fileList"
+pTypeLookup.FI = "fileInformation"
+pTypeLookup.TW = "textWrite"
+pTypeLookup.TC = "textCursorPos"
+pTypeLookup.TG = "textGetCursorPos"
+pTypeLookup.TD = "textGetSize"
+pTypeLookup.TI = "textInfo"
+pTypeLookup.TE = "textClear"
+pTypeLookup.TL = "textClearLine"
+pTypeLookup.TS = "textScroll"
+pTypeLookup.TB = "textBlink"
+pTypeLookup.SI = "instruction"
+
 
 function listen (port, time)
 	--used by foreground servers to wait for incoming packets.
+	port = tonumber(port)
 	local listenTimeOut = nil
 	if time then listenTimeOut = os.startTimer(time) end
 	while true do
@@ -50,9 +69,9 @@ function listen (port, time)
 			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
 			if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 			if routeNum then
-				if port == string.match(message, "^(%d+),%d+;") then
+				if port == tonumber(string.match(message, "^(%d+),%d+;")) then
 					for cNum, cInfo in pairs(connectionTable) do
-						if cInfo.route == routeNum and cInfo.localport = port then return cNum, packetType, string.match(message, ";(.*)"), dist end
+						if cInfo.route == routeNum and cInfo.localport == port then return cNum, packetType, string.match(message, ";(.*)"), dist end
 					end
 					local conn = {}
 					conn.route = routeNum
@@ -117,6 +136,7 @@ function lessResponse (port, time)
 end
 
 local function listenOnPort (port, time)
+	port = tonumber(port)
 	local listenTimeOut = nil
 	local messRecv = false
 	if time then listenTimeOut = os.startTimer(time) end
@@ -126,7 +146,7 @@ local function listenOnPort (port, time)
 			return false
 		elseif event == "rednet_message" then
 			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
-			if string.match(message, "^(%d+),") == port then
+			if message and tonumber(string.match(message, "^(%d+),%d+;")) == port then
 				if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 				messRecv = true
 			end
@@ -136,7 +156,7 @@ local function listenOnPort (port, time)
 end
 
 function awaitResponse (conn, time)
-	packetType, message, dist = listenOnPort(connection.localport, time)
+	packetType, message, dist = listenOnPort(connectionTable[conn].localport, time)
 	if packetType then
 		return packetType, string.match(message, ";(.*)"), dist
 	end
@@ -210,4 +230,79 @@ function route (conn)
 		return connectionTable[conn].route
 	end
 	return false
+end
+
+function text (conn)
+	local textTable = {}
+	textTable.conn = conn
+	textTable.write = function(text)
+		return connection.send(textTable.conn, "textWrite", text)
+	end
+	textTable.clear = function()
+		return connection.send(textTable.conn, "textClear", "nil")
+	end
+	textTable.clearLine = function()
+		return connection.send(textTable.conn, "textClearLine", "nil")
+	end
+	textTable.getCursorPos = function()
+		if connection.send(textTable.conn, "textGetCursorPos", "nil") then
+			local pType, message = connection.awaitResponse(textTable.conn, 2)
+			if pType and pType == "textInfo" then
+				local x, y = string.match(message, "(%d+),(%d+)")
+				return tonumber(x), tonumber(y)
+			end
+		else return false end
+	end
+	textTable.setCursorPos = function(x, y)
+		return connection.send(textTable.conn, "textCursorPos", math.floor(x)..","..math.floor(y))
+	end
+	textTable.setCursorBlink = function(b)
+		if b then
+			return connection.send(textTable.conn, "textBlink", "true")
+		else
+			return connection.send(textTable.conn, "textBlink", "false")
+		end
+	end
+	textTable.getSize = function()
+		if connection.send(textTable.conn, "textGetSize", "nil") then
+			local pType, message = connection.awaitResponse(textTable.conn, 2)
+			if pType and pType == "textInfo" then
+				local x, y = string.match(message, "(%d+),(%d+)")
+				return tonumber(x), tonumber(y)
+			end
+		else return false end
+	end
+	textTable.scroll = function(lines)
+		return connection.send(textTable.conn, "textScroll", lines)
+	end
+	return textTable
+end
+
+function processText(conn, pType, value)
+	if not pType then return false end
+	if pType == "textWrite" and value then
+		term.write(value)
+	elseif pType == "textClear" then
+		term.clear()
+	elseif pType == "textClearLine" then
+		term.clearLine()
+	elseif pType == "textGetCursorPos" then
+		local x, y = term.getCursorPos()
+		connection.send(conn, "textInfo", math.floor(x)..","..math.floor(y))
+	elseif pType == "textCursorPos" then
+		local x, y = string.match(value, "(%d+),(%d+)")
+		term.setCursorPos(x, y)
+	elseif pType == "textBlink" then
+		if value == "true" then
+			term.setCursorBlink(true)
+		else
+			term.setCursorBlink(false)
+		end
+	elseif pType == "textGetSize" then
+		x, y = term.getSize()
+		connection.send(conn, "textInfo", x..","..y)
+	elseif pType == "textScroll" and value then
+		term.scroll(value)
+	end
+	return
 end
