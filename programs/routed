@@ -15,9 +15,8 @@ function routeDaemon ()
 	while not routedExit do
 		local id, packet = coroutine.yield()
 		local packetType = string.sub(packet, 1, 2)
-		packet = string.match(packet, "^(%a%a):4,4;(.*)")
 		if packetType == "HA" then
-			local newRoute = net.add_route(id, string.match(packet, ":([CTR]) "), string.match(packet, ":[CTR] (%w+)"), 0, 0)
+			local newRoute = net.add_route(id, string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), 0, 0)
 			local string = os.computerID()..":0,0;R "..os.getComputerLabel()..">"
 			for rNum, rInfo in ipairs(net.routeTable) do
 				if rNum ~= newRoute then

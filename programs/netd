@@ -33,9 +33,8 @@ function netDaemon ()
 	while not netdExit do
 		local id, packet = coroutine.yield()
 		local packetType = string.sub(packet, 1, 2)
-		packet = string.match(packet, "^(%a%a):4,4;(.*)")
 		if packetType == "HA" then
-			net.add_route(id, string.match(packet, ":([CTR]) "), string.match(packet, ":[CTR] (%w+)"), 0, 0)
+			net.add_route(id, string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), 0, 0)
 			saveHosts()
 		elseif packetType == "HI" then
 			net.add_route(string.match(packet, "HI:(%d+):"), string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), string.match(packet, "%d+:(%d+),"), string.match(packet, ",(%d+);"))
