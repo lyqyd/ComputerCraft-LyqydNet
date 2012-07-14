@@ -245,7 +245,8 @@ to remember any state information they need to keep track of, so they
 do not interfere with other background servers.
 
 Foreground servers will receive packets being returned by rednet_message
-whether they are intended for the server or not, so the connection API
+whether they are intended for the server or not (except, of course, for
+any packets sent to a running background server), so the connection API
 is used to filter out those wayward packets.
 
 2.3 - Net File API
@@ -391,7 +392,9 @@ while true do
 			--'conn' to send data back.
 			connection.send(conn, "break", "OK")
 			--break packet tells the client we are done transmitting
-			--and are ready for the next command.
+			--and are ready for the next command. This is optional. Some
+			--types of servers wouldn't need to use this, e.g. a chat
+			--server.
 		elseif messType == "close" then
 			--client has closed the connection, so let's close out
 			--the connection information.
@@ -430,11 +433,11 @@ end
 
 Note that this example is very similar to the previous example, the
 foreground server. The critical difference here is that we use
-connection.listenIdle() to get packets (which uses coroutine.yield). We
-also declare the server as a function, and then use net.daemonAdd to add
-it to the daemon table.  Please note that the daemon name, "server" is
-the same as the server identifier in the previous example, which is in
-the connection.listen() call.
+connection.listenIdle() to get packets (which uses coroutine.yield()).
+We also declare the server as a function, and then use net.daemonAdd to
+add it to the daemon table.  Please note that the daemon name, "server"
+is the same as the server identifier in the previous example, which is
+in the connection.listen() call.
 
 ------------------------------------------------------------------------
 local connections = {}

@@ -8,10 +8,9 @@ function send (conn, localFile)
 	if fs.exists(localFile) then
 		if not connection.send(conn, "fileHeader", localFile) then return false end
 		local file = io.open( localFile, "r" )
-		local line = file:read()
-		while line do
-			connection.send(conn, "fileData", line)
-			line = file:read()
+		local contents = file:read("*a")
+		if contents then
+			connection.send(conn, "fileData", contents)
 		end
 		file:close()
 	else
@@ -33,25 +32,24 @@ end
 function receive (conn, lFile, timeout)
 	--already got an FS and replied, just catch the file header and data now.
 	if not connection.connectionTable[conn] then return false end
-	local fileTable = {}
+	local header = nil
+	local fileData = nil
 	while true do
 		messType, message = connection.awaitResponse(conn, timeout)
 		if messType == "fileEnd" then
 			if lFile then file = io.open( lFile, "w" ) end
 			if file then
-				if #fileTable == 0 then table.insert(fileTable, "") end
-				for i, line in ipairs( fileTable ) do
-					file:write( line .. "\n" )
-				end
+				if not fileData then fileData = "" end
+				file:write(fileData.."\n")
 				file:close()
 				return true, header
 			else
-				return fileTable, header
+				return fileData, header
 			end
 		elseif messType == "fileHeader" then
 			header = message
 		elseif messType == "fileData" then
-			table.insert(fileTable, message)
+			fileData = message
 		elseif messType == false then
 			return false
 		end
