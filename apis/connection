@@ -17,6 +17,7 @@ pTypeLookup.fileMove = "FV"
 pTypeLookup.fileMakeDirectory = "FK"
 pTypeLookup.fileList = "FL"
 pTypeLookup.fileInformation = "FI"
+pTypeLookup.fileStatus = "FZ"
 pTypeLookup.textWrite = "TW"
 pTypeLookup.textCursorPos = "TC"
 pTypeLookup.textGetCursorPos = "TG"
@@ -44,6 +45,7 @@ pTypeLookup.FV = "fileMove"
 pTypeLookup.FK = "fileMakeDirectory"
 pTypeLookup.FL = "fileList"
 pTypeLookup.FI = "fileInformation"
+pTypeLookup.FZ = "fileStatus"
 pTypeLookup.TW = "textWrite"
 pTypeLookup.TC = "textCursorPos"
 pTypeLookup.TG = "textGetCursorPos"
@@ -71,13 +73,13 @@ function listen (port, time)
 			if routeNum then
 				if port == tonumber(string.match(message, "^(%d+),%d+;")) then
 					for cNum, cInfo in pairs(connectionTable) do
-						if cInfo.route == routeNum and cInfo.localport == port then return cNum, packetType, string.match(message, ";(.*)"), dist end
+						if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
 					end
 					local conn = {}
 					conn.route = routeNum
 					conn.name = net.nameFromRoute(routeNum)
 					conn.localport = port
-					conn.foreignport = string.match(message, "^%d+,(%d+);")
+					conn.foreignport = tonumber(string.match(message, "^%d+,(%d+);"))
 					table.insert(connectionTable, conn)
 					return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 				end
@@ -91,13 +93,13 @@ function listenIdle (port)
 	if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 	if routeNum == 0 and packetType == "instruction" then return routeNum, packetType, message end
 	for cNum, cInfo in pairs(connectionTable) do
-		if cInfo.route == routeNum and cInfo.localport == port then return cNum, packetType, string.match(message, ";(.*)"), dist end
+		if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
 	end
 	local conn = {}
 	conn.route = routeNum
 	conn.name = net.nameFromRoute(routeNum)
 	conn.localport = port
-	conn.foreignport = string.match(message, "^%d+,(%d+);")
+	conn.foreignport = tonumber(string.match(message, "^%d+,(%d+);"))
 	table.insert(connectionTable, conn)
 	return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 end
@@ -200,10 +202,11 @@ function close (conn, message, quiet)
 	if connectionTable[conn] then
 		if quiet ~= true then
 			if message == nil then message = "disconnect" end
-			if connectionTable[conn].server ~= nil then message = connectionTable[conn].server..";"..message end
+			 message = connectionTable[conn].foreignport..","..connectionTable[conn].localport..";"..message 
 			net.packet_send("SC", connectionTable[conn].route, message)
 		end
-		net.socketTable[connectionTable[conn].localport] = nil
+		--must explicitly compare to true so that a string value will not evaluate as also true.
+		if net.socketTable[connectionTable[conn].localport] == true then net.socketTable[connectionTable[conn].localport] = nil end
 		connectionTable[conn] = nil
 		return true
 	end
