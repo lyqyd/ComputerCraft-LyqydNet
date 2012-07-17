@@ -48,6 +48,7 @@ function receive (conn, lFile, timeout)
 			end
 		elseif messType == "fileHeader" then
 			header = message
+			if header == "fileNotFound" then return true end
 		elseif messType == "fileData" then
 			fileData = message
 		elseif messType == false then
