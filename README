@@ -31,11 +31,11 @@ small details are gotten out of the developer's way.
 2.1.1 - connection.open()
 
 The open function takes three arguments; a computer identification
-string, a server identifier, and a timeout duration. To connect to a
-computer named "fileserver" running the "filed" program, for example,
-one would call:
+string, a socket number, and a timeout duration. To connect to a
+computer named "fileserver" running the "filed" program (which uses
+socket 21), for example, one would call:
 
-serverConnection = connection.open("fileserver", "filed", 2)
+serverConnection = connection.open("fileserver", 21, 2)
 
 This will send a packet to the computer specified, requesting to connect
 to the server. If a server is available there, it will respond. If a
@@ -107,14 +107,13 @@ connection.broadcast("query", "connect", "gpsd")
 
 The listen function is used by foreground servers (the computer is only
 running the server) to listen for incoming packets and connections. It
-takes two arguments; the server identifier and an optional timeout dur-
-ation.  The server identifier provided to this call is used to check
-incoming connection requests (from connection.open()), so it is
-imperative that they match. The listen function returns a connection
-number, a message type, and a message. For example, a file server might
-use:
+takes two arguments; the socket number and an optional timeout duration.
+The socket number provided to this call is used to check incoming
+connection requests (from connection.open()), so it is imperative that
+they match. The listen function returns a connection number, a message
+type, and a message. For example, a file server might use:
 
-clientConnection, messageType, message = connection.listen("filed")
+clientConnection, messageType, message = connection.listen(21)
 
 2.1.8 - connection.listenIdle()
 
@@ -122,8 +121,10 @@ The listenIdle function is used by background servers (a separate co-
 routine resumed as necessary based on network traffic). The listenIdle
 function is mostly a wrapper for the coroutine.yield() function. See
 2.2.13 for more information on how data is given to background servers.
-The listenIdle function returns exactly the same information as the
-listen function; a connection number, a message type, and a message.
+The listenIdle function is also called with a socket number (but not a
+timeout duration, as it will pass control away until a packet is
+received) returns exactly the same information as the listen function;
+a connection number, a message type, and a message.
 
 2.1.9 - connection.isTurtle()
 
@@ -162,10 +163,11 @@ function sends out basic information about the computer in a broadcast.
 
 2.2.2 - net.daemonAdd()
 
-This function takes two arguments; a daemon name and a function. The
-function is used to create a coroutine which will be resumed every time
-a packet is received for the daemon. Daemons are background servers.
-The daemon name will be used as the server identifier (see 2.1.1).
+This function takes three arguments; a daemon name, a function and a
+socket number. The function is used to create a coroutine which will be
+resumed every time a packet is received for the daemon on that socket.
+Daemons are background servers. See 2.1.1, 2.1.7, 2.1.8 for more
+information on socket numbers.
 
 2.2.3 - net.daemonRemove()
 
@@ -379,8 +381,8 @@ network humming along!
 local connections = {}
 
 while true do
-	--wait for input from client connections.
-	conn, messType, message = connection.listen("server")
+	--wait for input from client connections on socket 21.
+	conn, messType, message = connection.listen(21)
 	--okay, we have a packet, see if the connection is one we already
 	--know about.
 	if connections[conn] and connections[conn].status == "open" then
@@ -444,8 +446,8 @@ local connections = {}
 
 function serverFunction ()
 	while true do
-		--wait for input from client connections.
-		conn, messType, message = connection.listenIdle()
+		--wait for input from client connections on socket 21.
+		conn, messType, message = connection.listenIdle(21)
 		--okay, we have a packet, see if the connection is one we
 		--already know about.
 		if connections[conn] and connections[conn].status == "open" then
@@ -492,7 +494,8 @@ function serverFunction ()
 	end
 end
 
-net.addDaemon("server", serverFunction)
+--make sure the socket number here matches the socket number used above.
+net.addDaemon("server", serverFunction, 21)
 ------------------------------------------------------------------------
 
 4.3 - Example Client
@@ -516,7 +519,7 @@ while true do
 	end
 	if commandArgs[1] == "open" then
 		if commandArgs[2] then
-			serverConnection, remoteDir = connection.open(commandArgs[2], "server", 2)
+			serverConnection, remoteDir = connection.open(commandArgs[2], 21, 2)
 			if not serverConnection then
 				print("Connection Failed!")
 			else
