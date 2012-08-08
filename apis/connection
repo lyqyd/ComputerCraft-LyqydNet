@@ -133,10 +133,6 @@ function broadcast (messType, message, toPort)
 	return fromPort
 end
 
-function lessResponse (port, time)
-	return listenOnPort(port, time)
-end
-
 local function listenOnPort (port, time)
 	port = tonumber(port)
 	local listenTimeOut = nil
@@ -155,6 +151,10 @@ local function listenOnPort (port, time)
 		end
 	end
 	return packetType, message, dist
+end
+
+function lessResponse (port, time)
+	return listenOnPort(port, time)
 end
 
 function awaitResponse (conn, time)
