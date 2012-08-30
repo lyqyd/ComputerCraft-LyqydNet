@@ -2,7 +2,7 @@ routeTable = {}
 daemonTable = {}
 socketTable = {}
 
-function netInit ()
+function netInit (_side)
 	--initialize network communications
 	local packet = "HA:4,4;"
 	local label = os.getComputerLabel()
@@ -17,12 +17,17 @@ function netInit ()
 			end
 		end
 		local open = false
-		for n,side in pairs(rs.getSides()) do
-			if peripheral.getType(side) == "modem" then
-				rednet.open(side)
-				open = true
-				break
+		if not _side then
+			for n,side in pairs(rs.getSides()) do
+				if peripheral.getType(side) == "modem" then
+					rednet.open(side)
+					open = true
+					break
+				end
 			end
+		else
+			rednet.open(_side)
+			open = true
 		end
 		if open then return rednet.broadcast(packet) end
 	end
@@ -188,10 +193,7 @@ function rednet_message (id, message, dist)
 		end
 		local dest_socket = tonumber(string.match(message, "^(%d+),%d+;"))
 		if dest_socket and type(daemonTable[socketTable[dest_socket]]) == "thread" then
-			oldprint = print
-			print = localprint
 			coroutine.resume(daemonTable[socketTable[dest_socket]], routeNum, packetType, message, dist)
-			print = oldprint
 			return nil
 		else
 			return routeNum, packetType, message, dist
