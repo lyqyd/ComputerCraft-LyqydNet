@@ -1,136 +1,17 @@
-function newread( _sReplaceChar, _tHistory )	
-	term.setCursorBlink( true )
+local oldpull = os.pullEvent
 
-	local sLine = ""
-	local nHistoryPos = nil
-	local nPos = 0
-	if _sReplaceChar then
-		_sReplaceChar = string.sub( _sReplaceChar, 1, 1 )
-	end
-	
-	local foo = 0
-	local w, h = term.getSize()
-	local sx, sy = term.getCursorPos()	
-	local function redraw()
-		local nScroll = 0
-		if sx + nPos >= w then
-			nScroll = (sx + nPos) - w
-		end
-			
-		term.setCursorPos( sx, sy )
-		term.write( string.rep(" ", w - sx + 1) )
-		term.setCursorPos( sx, sy )
-		if _sReplaceChar then
-			term.write( string.rep(_sReplaceChar, string.len(sLine) - nScroll) )
-		else
-			term.write( string.sub( sLine, nScroll + 1 ) )
-		end
-		term.setCursorPos( sx + nPos - nScroll, sy )
-	end
-	
+function newPull(filter)
 	while true do
-		local sEvent, param, param2, param3 = os.pullEvent()
-		if sEvent == "char" then
-			sLine = string.sub( sLine, 1, nPos ) .. param .. string.sub( sLine, nPos + 1 )
-			nPos = nPos + 1
-			redraw()
-			
-		elseif sEvent == "key" then
-			if param == 28 then
-				-- Enter
-				break
-				
-			elseif param == 203 then
-				-- Left
-				if nPos > 0 then
-					nPos = nPos - 1
-					redraw()
-				end
-				
-			elseif param == 205 then
-				-- Right				
-				if nPos < string.len(sLine) then
-					nPos = nPos + 1
-					redraw()
-				end
-			
-			elseif param == 200 or param == 208 then
-				-- Up or down
-				if _tHistory then
-					if param == 200 then
-						-- Up
-						if nHistoryPos == nil then
-							if #_tHistory > 0 then
-								nHistoryPos = #_tHistory
-							end
-						elseif nHistoryPos > 1 then
-							nHistoryPos = nHistoryPos - 1
-						end
-					else
-						-- Down
-						if nHistoryPos == #_tHistory then
-							nHistoryPos = nil
-						elseif nHistoryPos ~= nil then
-							nHistoryPos = nHistoryPos + 1
-						end						
-					end
-					
-					if nHistoryPos then
-						sLine = _tHistory[nHistoryPos]
-						nPos = string.len( sLine ) 
-					else
-						sLine = ""
-						nPos = 0
-					end
-					redraw()
-				end
-			elseif param == 14 then
-				-- Backspace
-				if nPos > 0 then
-					sLine = string.sub( sLine, 1, nPos - 1 ) .. string.sub( sLine, nPos + 1 )
-					nPos = nPos - 1					
-					redraw()
-				end
-			elseif param == 199 then
-				--home
-				if nPos > 0 then
-					nPos = 0
-					redraw()
-				end					   
-			elseif param == 207 then
-				--end							   
-				if nPos < string.len(sLine) then
-					nPos = string.len(sLine)
-					redraw()
-				end
-			elseif param == 211 then
-				--delete
-				if nPos >= 0 and nPos < string.len(sLine) then
-					if nPos == 0 then
-						sLine = string.sub( sLine, 2)
-					else
-						sLine = string.sub( sLine, 1, nPos ) .. string.sub( sLine, nPos + 2 )
-					end
-					redraw()
-				end
+		local event = {oldpull(filter)}
+		if event[1] == "rednet_message" then
+			result = {net.message(event[2], event[3], event[4])}
+			if result then
+				return "rednet_message", unpack(result)
 			end
-		elseif sEvent == "rednet_message" then
-			net.rednet_message(param, param2, param3)
-			foo, sy = term.getCursorPos()
-			if shell.getRunningProgram() == nil then
-				term.setCursorPos(1, sy)
-				term.write(shell.dir().."> ")
-				term.setCursorPos(foo, sy)
-			end
-			redraw()
+		else
+			return unpack(event)
 		end
 	end
-	
-	term.setCursorBlink( false )
-	term.setCursorPos( w + 1, sy )
-	print()
-	
-	return sLine
 end
 
-rawset(_G, "read", newread)
+rawset(os, "pullEvent", newPull)
