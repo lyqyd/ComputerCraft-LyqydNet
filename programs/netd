@@ -45,7 +45,7 @@ function netDaemon ()
 				if turtle then
 					packet = packet.."T "..label
 				else
-					if daemonTable.routed then
+					if net.daemonTable.routed then
 						packet = packet.."R "..label
 					else
 						packet = packet.."C "..label
