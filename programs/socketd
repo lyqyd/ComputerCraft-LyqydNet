@@ -1,0 +1,28 @@
+function socketDaemon()
+	while true do
+		local inSocket, id, msg, dist = coroutine.yield()
+		local routeNum
+		for rNum,rInfo in ipairs(net.routeTable) do
+			if id == rInfo.idNum then
+				routeNum = rNum
+			end
+		end 
+end
+
+local oldpull = os.pullEvent
+
+function newPull(filter)
+	while true do
+		local event = {oldpull(filter)}
+		if event[1] == "socket_message" then
+			result = {coroutine.resume(event[2], event[3], event[4])}
+			if result then
+				return "rednet_message", unpack(result)
+			end
+		else
+			return unpack(event)
+		end
+	end
+end
+
+rawset(os, "pullEvent", newPull)
