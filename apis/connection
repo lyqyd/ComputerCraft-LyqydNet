@@ -65,25 +65,24 @@ function listen (port, time)
 	local listenTimeOut = nil
 	if time then listenTimeOut = os.startTimer(time) end
 	while true do
-		local event, p1, p2, p3 = os.pullEvent()
+		local event, p1, p2, p3, p4 = os.pullEvent()
 		if event == "timer" and p1 == listenTimeOut then
 			return false
-		elseif event == "rednet_message" then
-			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+		elseif event == "socket_message" then
+			local routeNum, packetType, message, dist = p1, p2, p3, p4
 			if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
-			if routeNum then
-				if port == tonumber(string.match(message, "^(%d+),%d+;")) then
-					for cNum, cInfo in pairs(connectionTable) do
-						if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
-					end
-					local conn = {}
-					conn.route = routeNum
-					conn.name = net.nameFromRoute(routeNum)
-					conn.localport = port
-					conn.foreignport = tonumber(string.match(message, "^%d+,(%d+);"))
-					table.insert(connectionTable, conn)
-					return #connectionTable, packetType, string.match(message, ";(.*)"), dist
+			if port == tonumber(string.match(message, "^(%d+),%d+;")) then
+				for cNum, cInfo in pairs(connectionTable) do
+					if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
 				end
+				local conn = {
+					route = routeNum,
+					name = net.nameFromRoute(routeNum),
+					localport = port,
+					foreignport = tonumber(string.match(message, "^%d+,(%d+);")),
+				}
+				table.insert(connectionTable, conn)
+				return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 			end
 		end
 	end
@@ -96,11 +95,12 @@ function listenIdle (port)
 	for cNum, cInfo in pairs(connectionTable) do
 		if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
 	end
-	local conn = {}
-	conn.route = routeNum
-	conn.name = net.nameFromRoute(routeNum)
-	conn.localport = port
-	conn.foreignport = tonumber(string.match(message, "^%d+,(%d+);"))
+	local conn = {
+		route = routeNum,
+		name = net.nameFromRoute(routeNum),
+		localport = port,
+		foreignport = tonumber(string.match(message, "^%d+,(%d+);")),
+	}
 	table.insert(connectionTable, conn)
 	return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 end
@@ -140,11 +140,11 @@ local function listenOnPort (port, time)
 	local messRecv = false
 	if time then listenTimeOut = os.startTimer(time) end
 	while not messRecv do
-		local event, p1, p2, p3 = os.pullEvent()
+		local event, p1, p2, p3, p4 = os.pullEvent()
 		if event == "timer" and p1 == listenTimeOut then
 			return false
-		elseif event == "rednet_message" then
-			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+		elseif event == "socket_message" then
+			routeNum, packetType, message, dist = p1, p2, p3, p4
 			if message and tonumber(string.match(message, "^(%d+),%d+;")) == port then
 				if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 				messRecv = true
