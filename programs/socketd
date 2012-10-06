@@ -6,7 +6,14 @@ function socketDaemon()
 			if id == rInfo.idNum then
 				routeNum = rNum
 			end
-		end 
+		end
+		if net.socketTable[inSocket] then
+			coroutine.resume(net.daemonTable[net.socketTable[inSocket]], routeNum, string.match(msg, "^(%a%a):(%d+,%d+;.*)"))
+			if coroutine.status(net.daemonTable[net.socketTable[inSocket]]) == "dead" then
+				net.daemonTable[net.socketTable[inSocket]] = nil
+				net.socketTable[inSocket] = nil
+			end
+		end
 end
 
 local oldpull = os.pullEvent
