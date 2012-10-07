@@ -94,15 +94,6 @@ function packet_send (pType, routeNum, message)
 	else return false end
 end
 
-function packet_receive (idNumber, message)
-	idNumber = tonumber(idNumber)
-	for rNum,rInfo in ipairs(routeTable) do
-		if idNumber == rInfo.idNum then
-			return rNum, string.sub(message, 1, 2), string.match(message, ":(.*)")
-		end
-	end
-end
-
 function add_route (idNumber, compType, compName, gateway, cost)
 	idNumber = tonumber(idNumber)
 	compType = tostring(compType)
