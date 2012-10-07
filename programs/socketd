@@ -1,23 +1,31 @@
 function socketDaemon()
-	--true if daemon found in socketTable, false to return event.
-	local returnStatus = true
+	--false to not return anything, otherwise return routenum, etc.
+	local returnStatus = {false}
 	while true do
-		local inSocket, id, msg, dist = coroutine.yield(returnStatus)
-		returnStatus = false
-		local routeNum
-		for rNum,rInfo in ipairs(net.routeTable) do
-			if id == rInfo.idNum then
-				routeNum = rNum
+		local inSocket, id, msg, dist = coroutine.yield(unpack(returnStatus))
+		if inSocket == 4 then
+			if net.socketTable[4] then
+				coroutine.resume(net.daemonTable[net.socketTable[4]], id, msg, dist)
+			end
+		else
+			local routeNum
+			for rNum,rInfo in ipairs(net.routeTable) do
+				if id == rInfo.idNum then
+					routeNum = rNum
+				end
+			end
+			local pType, msg = string.match(msg, "^(%a%a):(%d+,%d+;.*)")
+			returnStatus = {routeNum, pType, msg, dist}
+			if net.socketTable[inSocket] then
+				coroutine.resume(net.daemonTable[net.socketTable[inSocket]], routeNum, pType, msg, dist)
+				returnStatus = {false}
+				if coroutine.status(net.daemonTable[net.socketTable[inSocket]]) == "dead" then
+					net.daemonTable[net.socketTable[inSocket]] = nil
+					net.socketTable[inSocket] = nil
+				end
 			end
 		end
-		if net.socketTable[inSocket] then
-			returnStatus = true
-			coroutine.resume(net.daemonTable[net.socketTable[inSocket]], routeNum, string.match(msg, "^(%a%a):(%d+,%d+;.*)"), dist)
-			if coroutine.status(net.daemonTable[net.socketTable[inSocket]]) == "dead" then
-				net.daemonTable[net.socketTable[inSocket]] = nil
-				net.socketTable[inSocket] = nil
-			end
-		end
+	end
 end
 
 local sockd = coroutine.create(socketDaemon)
@@ -30,8 +38,9 @@ function newPull(filter)
 		local event = {oldpull(filter)}
 		if event[1] == "socket_message" then
 			result = {coroutine.resume(sockd, event[2], event[3], event[4], event[5])}
-			if not result[2] then
-				return unpack(event)
+			if result[2] then
+				result[1] = "socket_message"
+				return unpack(result)
 			end
 		else
 			return unpack(event)
