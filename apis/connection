@@ -183,14 +183,15 @@ function open (idString, serverPort, timeout)
 		pType, mess = listenOnPort(portChoice, timeout)
 		if not pType then return false end
 		if pType == "response" then
-			local conn = {}
-			conn.route = routeNum
-			conn.name = net.nameFromRoute(routeNum)
-			conn.localport = portChoice
-			conn.foreignport = serverPort
+			local conn = {
+				route = routeNum,
+				name = net.nameFromRoute(routeNum),
+				localport = portChoice,
+				foreignport = serverPort,
+			}
 			table.insert(connectionTable, conn)
 			if mess then
-				return #connectionTable, mess
+				return #connectionTable, string.match(mess, ";(.*)")
 			else
 				return #connectionTable
 			end

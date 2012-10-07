@@ -15,3 +15,5 @@ function newPull(filter)
 end
 
 rawset(os, "pullEvent", newPull)
+
+shell.run("socketd")

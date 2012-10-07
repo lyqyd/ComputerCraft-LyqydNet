@@ -3,6 +3,7 @@ function socketDaemon()
 	local returnStatus = {false}
 	while true do
 		local inSocket, id, msg, dist = coroutine.yield(unpack(returnStatus))
+		inSocket, id = tonumber(inSocket), tonumber(id)
 		if inSocket == 4 then
 			if net.socketTable[4] then
 				coroutine.resume(net.daemonTable[net.socketTable[4]], id, msg, dist)
@@ -16,7 +17,7 @@ function socketDaemon()
 			end
 			local pType, msg = string.match(msg, "^(%a%a):(%d+,%d+;.*)")
 			returnStatus = {routeNum, pType, msg, dist}
-			if net.socketTable[inSocket] then
+			if type(net.socketTable[inSocket]) == "string" then
 				coroutine.resume(net.daemonTable[net.socketTable[inSocket]], routeNum, pType, msg, dist)
 				returnStatus = {false}
 				if coroutine.status(net.daemonTable[net.socketTable[inSocket]]) == "dead" then
