@@ -167,13 +167,13 @@ function message(id, msg, dist)
 			if packetType == "PC" then packet_send("PS", routeFromCID(id), msg) end
 			return msg(string.match(msg, ":%d+,(%d+)<"), string.match(msg, "<(.*)>"), false)
 		else
-			os.queueEvent("socket_msg", 4, id, msg, false)
+			os.queueEvent("socket_message", 4, id, msg, false)
 			return false
 		end
 	else
 		--if the string.match failed, assume this is not a LyqydNet packet.
 		if not inSocket then return id, msg, dist end
-		os.queueEvent("socket_msg", inSocket, id, msg, dist)
+		os.queueEvent("socket_message", inSocket, id, msg, dist)
 		return false
 	end
 end
