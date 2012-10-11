@@ -392,7 +392,8 @@ while true do
 		if messType == "data" then
 			--handle client input here; use the connection number in
 			--'conn' to send data back.
-			connection.send(conn, "break", "OK")
+			print(message)
+			connection.send(conn, "done", "OK")
 			--break packet tells the client we are done transmitting
 			--and are ready for the next command. This is optional. Some
 			--types of servers wouldn't need to use this, e.g. a chat
@@ -457,7 +458,7 @@ function serverFunction ()
 			if messType == "data" then
 				--handle client input here; use the connection number in
 				--'conn' to send data back.
-				connection.send(conn, "break", "OK")
+				connection.send(conn, "done", "OK")
 				--break packet tells the client we are done transmitting
 				--and are ready for the next command.
 			elseif messType == "close" then
