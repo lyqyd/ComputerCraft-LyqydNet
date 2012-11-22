@@ -181,7 +181,7 @@ function rednet_message (id, message, dist)
 		else
 			return false
 		end
-	elseif packetType == "HA" or packetType == "HT" then
+	elseif packetType == "HA" or packetType == "HT" or packetType == "HI" then
 		if socketTable[4] then
 			coroutine.resume(daemonTable[socketTable[4]], id, message)
 		end
