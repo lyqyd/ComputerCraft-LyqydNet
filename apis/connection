@@ -1,5 +1,5 @@
 connectionTable = {}
-local pTypeLookup = {
+pTypeLookup = {
 	query = "SQ",
 	response = "SR",
 	data = "SP",
@@ -27,6 +27,9 @@ local pTypeLookup = {
 	textClearLine = "TL",
 	textScroll = "TS",
 	textBlink = "TB",
+	textColor = "TF",
+	textBackground = "TK",
+	textIsColor = "TA",
 	instruction = "SI",
 	SQ = "query",
 	SR = "response",
@@ -55,6 +58,9 @@ local pTypeLookup = {
 	TL = "textClearLine",
 	TS = "textScroll",
 	TB = "textBlink",
+	TF = "textColor",
+	TK = "textBackground",
+	TA = "textIsColor",
 	SI = "instruction",
 }
 
@@ -280,6 +286,26 @@ function text (conn)
 	textTable.scroll = function(lines)
 		return connection.send(textTable.conn, "textScroll", lines)
 	end
+	textTable.isColor = function()
+		if connection.send(textTable.conn, "textIsColor", "nil") then
+			local pType, message = connection.awaitResponse(textTable.conn, 2)
+			if pType and pType == "textInfo" then
+				if message == "true" then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	textTable.isColour = textTable.isColor
+	textTable.setTextColor = function(color)
+		return connection.send(textTable.conn, "textColor", tostring(color))
+	end
+	textTable.setTextColour = textTable.setTextColor
+	textTable.setBackgroundColor = function(color)
+		return connection.send(textTable.conn, "textBackground", tostring(color))
+	end
+	textTable.setBackgroundColour = textTable.setBackgroundColor
 	return textTable
 end
 
@@ -296,7 +322,7 @@ function processText(conn, pType, value)
 		connection.send(conn, "textInfo", math.floor(x)..","..math.floor(y))
 	elseif pType == "textCursorPos" then
 		local x, y = string.match(value, "(%d+),(%d+)")
-		term.setCursorPos(x, y)
+		term.setCursorPos(tonumber(x), tonumber(y))
 	elseif pType == "textBlink" then
 		if value == "true" then
 			term.setCursorBlink(true)
@@ -307,7 +333,19 @@ function processText(conn, pType, value)
 		x, y = term.getSize()
 		connection.send(conn, "textInfo", x..","..y)
 	elseif pType == "textScroll" and value then
-		term.scroll(value)
+		term.scroll(tonumber(value))
+	elseif pType == "textIsColor" then
+		connection.send(conn, "textInfo", tostring(term.isColor()))
+	elseif pType == "textColor" and value then
+		value = tonumber(value)
+		if (value == 1 or value == 32768) or term.isColor() then
+			term.setTextColor(value)
+		end
+	elseif pType == "textBackground" and value then
+		value = tonumber(value)
+		if (value == 1 or value == 32768) or term.isColor() then
+			term.setBackgroundColor(value)
+		end
 	end
 	return
 end
