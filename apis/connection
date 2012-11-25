@@ -210,7 +210,7 @@ function close (conn, message, quiet)
 	if connectionTable[conn] then
 		if quiet ~= true then
 			if message == nil then message = "disconnect" end
-			 message = connectionTable[conn].foreignport..","..connectionTable[conn].localport..";"..message 
+			message = connectionTable[conn].foreignport..","..connectionTable[conn].localport..";"..message 
 			net.packet_send("SC", connectionTable[conn].route, message)
 		end
 		--must explicitly compare to true so that a string value will not evaluate as also true.
