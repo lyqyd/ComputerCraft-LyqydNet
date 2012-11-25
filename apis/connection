@@ -1,5 +1,5 @@
 connectionTable = {}
-local pTypeLookup = {
+pTypeLookup = {
 	query = "SQ",
 	response = "SR",
 	data = "SP",
@@ -27,6 +27,9 @@ local pTypeLookup = {
 	textClearLine = "TL",
 	textScroll = "TS",
 	textBlink = "TB",
+	textColor = "TF",
+	textBackground = "TK",
+	textIsColor = "TA",
 	instruction = "SI",
 	SQ = "query",
 	SR = "response",
@@ -55,6 +58,9 @@ local pTypeLookup = {
 	TL = "textClearLine",
 	TS = "textScroll",
 	TB = "textBlink",
+	TF = "textColor",
+	TK = "textBackground",
+	TA = "textIsColor",
 	SI = "instruction",
 }
 
@@ -65,25 +71,24 @@ function listen (port, time)
 	local listenTimeOut = nil
 	if time then listenTimeOut = os.startTimer(time) end
 	while true do
-		local event, p1, p2, p3 = os.pullEvent()
+		local event, p1, p2, p3, p4 = os.pullEvent()
 		if event == "timer" and p1 == listenTimeOut then
 			return false
-		elseif event == "rednet_message" then
-			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+		elseif event == "socket_message" then
+			local routeNum, packetType, message, dist = p1, p2, p3, p4
 			if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
-			if routeNum then
-				if port == tonumber(string.match(message, "^(%d+),%d+;")) then
-					for cNum, cInfo in pairs(connectionTable) do
-						if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
-					end
-					local conn = {}
-					conn.route = routeNum
-					conn.name = net.nameFromRoute(routeNum)
-					conn.localport = port
-					conn.foreignport = tonumber(string.match(message, "^%d+,(%d+);"))
-					table.insert(connectionTable, conn)
-					return #connectionTable, packetType, string.match(message, ";(.*)"), dist
+			if port == tonumber(string.match(message, "^(%d+),%d+;")) then
+				for cNum, cInfo in pairs(connectionTable) do
+					if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
 				end
+				local conn = {
+					route = routeNum,
+					name = net.nameFromRoute(routeNum),
+					localport = port,
+					foreignport = tonumber(string.match(message, "^%d+,(%d+);")),
+				}
+				table.insert(connectionTable, conn)
+				return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 			end
 		end
 	end
@@ -96,11 +101,12 @@ function listenIdle (port)
 	for cNum, cInfo in pairs(connectionTable) do
 		if cInfo.route == routeNum and cInfo.localport == port and cInfo.foreignport == tonumber(string.match(message, "^%d+,(%d+);")) then return cNum, packetType, string.match(message, ";(.*)"), dist end
 	end
-	local conn = {}
-	conn.route = routeNum
-	conn.name = net.nameFromRoute(routeNum)
-	conn.localport = port
-	conn.foreignport = tonumber(string.match(message, "^%d+,(%d+);"))
+	local conn = {
+		route = routeNum,
+		name = net.nameFromRoute(routeNum),
+		localport = port,
+		foreignport = tonumber(string.match(message, "^%d+,(%d+);")),
+	}
 	table.insert(connectionTable, conn)
 	return #connectionTable, packetType, string.match(message, ";(.*)"), dist
 end
@@ -140,11 +146,11 @@ local function listenOnPort (port, time)
 	local messRecv = false
 	if time then listenTimeOut = os.startTimer(time) end
 	while not messRecv do
-		local event, p1, p2, p3 = os.pullEvent()
+		local event, p1, p2, p3, p4 = os.pullEvent()
 		if event == "timer" and p1 == listenTimeOut then
 			return false
-		elseif event == "rednet_message" then
-			routeNum, packetType, message, dist = net.rednet_message(p1, p2, p3)
+		elseif event == "socket_message" then
+			routeNum, packetType, message, dist = p1, p2, p3, p4
 			if message and tonumber(string.match(message, "^(%d+),%d+;")) == port then
 				if pTypeLookup[packetType] then packetType = pTypeLookup[packetType] end
 				messRecv = true
@@ -183,14 +189,15 @@ function open (idString, serverPort, timeout)
 		pType, mess = listenOnPort(portChoice, timeout)
 		if not pType then return false end
 		if pType == "response" then
-			local conn = {}
-			conn.route = routeNum
-			conn.name = net.nameFromRoute(routeNum)
-			conn.localport = portChoice
-			conn.foreignport = serverPort
+			local conn = {
+				route = routeNum,
+				name = net.nameFromRoute(routeNum),
+				localport = portChoice,
+				foreignport = serverPort,
+			}
 			table.insert(connectionTable, conn)
 			if mess then
-				return #connectionTable, mess
+				return #connectionTable, string.match(mess, ";(.*)")
 			else
 				return #connectionTable
 			end
@@ -203,7 +210,7 @@ function close (conn, message, quiet)
 	if connectionTable[conn] then
 		if quiet ~= true then
 			if message == nil then message = "disconnect" end
-			 message = connectionTable[conn].foreignport..","..connectionTable[conn].localport..";"..message 
+			message = connectionTable[conn].foreignport..","..connectionTable[conn].localport..";"..message 
 			net.packet_send("SC", connectionTable[conn].route, message)
 		end
 		--must explicitly compare to true so that a string value will not evaluate as also true.
@@ -279,6 +286,26 @@ function text (conn)
 	textTable.scroll = function(lines)
 		return connection.send(textTable.conn, "textScroll", lines)
 	end
+	textTable.isColor = function()
+		if connection.send(textTable.conn, "textIsColor", "nil") then
+			local pType, message = connection.awaitResponse(textTable.conn, 2)
+			if pType and pType == "textInfo" then
+				if message == "true" then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	textTable.isColour = textTable.isColor
+	textTable.setTextColor = function(color)
+		return connection.send(textTable.conn, "textColor", tostring(color))
+	end
+	textTable.setTextColour = textTable.setTextColor
+	textTable.setBackgroundColor = function(color)
+		return connection.send(textTable.conn, "textBackground", tostring(color))
+	end
+	textTable.setBackgroundColour = textTable.setBackgroundColor
 	return textTable
 end
 
@@ -295,7 +322,7 @@ function processText(conn, pType, value)
 		connection.send(conn, "textInfo", math.floor(x)..","..math.floor(y))
 	elseif pType == "textCursorPos" then
 		local x, y = string.match(value, "(%d+),(%d+)")
-		term.setCursorPos(x, y)
+		term.setCursorPos(tonumber(x), tonumber(y))
 	elseif pType == "textBlink" then
 		if value == "true" then
 			term.setCursorBlink(true)
@@ -306,7 +333,19 @@ function processText(conn, pType, value)
 		x, y = term.getSize()
 		connection.send(conn, "textInfo", x..","..y)
 	elseif pType == "textScroll" and value then
-		term.scroll(value)
+		term.scroll(tonumber(value))
+	elseif pType == "textIsColor" then
+		connection.send(conn, "textInfo", tostring(term.isColor()))
+	elseif pType == "textColor" and value then
+		value = tonumber(value)
+		if (value == 1 or value == 32768) or term.isColor() then
+			term.setTextColor(value)
+		end
+	elseif pType == "textBackground" and value then
+		value = tonumber(value)
+		if (value == 1 or value == 32768) or term.isColor() then
+			term.setBackgroundColor(value)
+		end
 	end
 	return
 end

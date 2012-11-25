@@ -1,26 +1,32 @@
 tArgs = {...}
 
+local oldRM, oldPS
+
 function intercept(p1, p2, p3)
-	net.localprint(p1..": "..p2.." @ "..p3)
+	write(p1)
+	write(": ")
+	write(p2)
+	write(" @ ")
+	print(p3)
 	return oldRM(p1, p2, p3)
 end
 
 function printOut(p1, p2)
-	net.localprint("-->"..p1..": "..p2)
+	print("-->"..p1..": "..p2)
 	return oldPS(p1, p2)
 end
 
 
 if #tArgs == 1 then
 	if tArgs[1] == "start" then
-		oldRM = net.rednet_message
+		oldRM = net.message
 		oldPS = rednet.send
-		net.rednet_message = intercept
-		rednet.send = printOut
+		rawset(net, "message", intercept)
+		rawset(rednet, "send", printOut)
 		return true
 	elseif tArgs[1] == "stop" then
-		net.rednet_message = oldRM
-		rednet.send = oldPS
+		rawset(net, "message", oldRM)
+		rawset(rednet, "send", oldPS)
 		return true
 	else
 		print("Usage: netmon [start|stop]")

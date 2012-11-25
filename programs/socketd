@@ -1,0 +1,52 @@
+function socketDaemon()
+	--false to not return anything, otherwise return routenum, etc.
+	local returnStatus = {false}
+	while true do
+		local inSocket, id, msg, dist = coroutine.yield(unpack(returnStatus))
+		inSocket, id = tonumber(inSocket), tonumber(id)
+		if inSocket == 4 then
+			if net.socketTable[4] then
+				coroutine.resume(net.daemonTable[net.socketTable[4]], id, msg, dist)
+			end
+		else
+			local routeNum
+			for rNum,rInfo in ipairs(net.routeTable) do
+				if id == rInfo.idNum then
+					routeNum = rNum
+				end
+			end
+			local pType, msg = string.match(msg, "^(%a%a):(%d+,%d+;.*)")
+			returnStatus = {routeNum, pType, msg, dist}
+			if type(net.socketTable[inSocket]) == "string" then
+				coroutine.resume(net.daemonTable[net.socketTable[inSocket]], routeNum, pType, msg, dist)
+				returnStatus = {false}
+				if coroutine.status(net.daemonTable[net.socketTable[inSocket]]) == "dead" then
+					net.daemonTable[net.socketTable[inSocket]] = nil
+					net.socketTable[inSocket] = nil
+				end
+			end
+		end
+	end
+end
+
+local sockd = coroutine.create(socketDaemon)
+coroutine.resume(sockd)
+
+local oldpull = os.pullEvent
+
+function newPull(filter)
+	while true do
+		local event = {oldpull(filter)}
+		if event[1] == "socket_message" then
+			result = {coroutine.resume(sockd, event[2], event[3], event[4], event[5])}
+			if result[2] then
+				result[1] = "socket_message"
+				return unpack(result)
+			end
+		else
+			return unpack(event)
+		end
+	end
+end
+
+rawset(os, "pullEvent", newPull)

@@ -94,15 +94,6 @@ function packet_send (pType, routeNum, message)
 	else return false end
 end
 
-function packet_receive (idNumber, message)
-	idNumber = tonumber(idNumber)
-	for rNum,rInfo in ipairs(routeTable) do
-		if idNumber == rInfo.idNum then
-			return rNum, string.sub(message, 1, 2), string.match(message, ":(.*)")
-		end
-	end
-end
-
 function add_route (idNumber, compType, compName, gateway, cost)
 	idNumber = tonumber(idNumber)
 	compType = tostring(compType)
@@ -154,49 +145,26 @@ function remove_route (route)
 	end
 end
 
-function localprint (...)
-	w, h = term.getSize()
-	x, y = term.getCursorPos()
-	term.setCursorPos(1, y)
-	term.clearLine()
-	lines = print(...)
-	if y + lines <= h then
-		y = y + lines
-	else
-		y = h
+function message(id, msg, dist)
+	local packetType, inSocket, foreignSocket, body
+	if msg then
+		--packetType must be grabbed separately, as forwared packets do not follow the same structure.
+		packetType = string.sub(msg, 1, 2)
+		inSocket = string.match(msg, "^%a%a:(%d+),%d+;")
 	end
-	term.setCursorPos(x, y)
-	return lines
-end
-
-function rednet_message (id, message, dist)
-	local packetType = ""
-	if message then packetType = string.sub(message, 1, 2) else return false end
 	if packetType == "PF" or packetType == "PC" then
-		if tonumber(string.match(message, ":(%d+),%d+<")) == os.computerID() then
-			if packetType == "PC" then packet_send("PS", routeFromCID(id), message) end
-			return rednet_message(string.match(message, ":%d+,(%d+)<"), string.match(message, "<(.*)>"), false)
-		elseif socketTable[4] then
-			coroutine.resume(daemonTable[socketTable[4]], id, message)
+		if tonumber(string.match(msg, ":(%d+),%d+<")) == os.computerID() then
+			if packetType == "PC" then packet_send("PS", routeFromCID(id), msg) end
+			os.queueEvent("rednet_message", string.match(msg, ":%d+,(%d+)<"), string.match(msg, "<(.*)>"), false)
+			return false
 		else
+			os.queueEvent("socket_message", 4, id, msg, false)
 			return false
 		end
-	elseif packetType == "HA" or packetType == "HT" then
-		if socketTable[4] then
-			coroutine.resume(daemonTable[socketTable[4]], id, message)
-		end
 	else
-		local routeNum, packetType, message = packet_receive(id, message)
-		if routeTable[routeNum].gateway ~= 0 and dist then
-			routeTable[routeNum].gateway = 0
-			routeTable[routeNum].cost = 0
-		end
-		local dest_socket = tonumber(string.match(message, "^(%d+),%d+;"))
-		if dest_socket and type(daemonTable[socketTable[dest_socket]]) == "thread" then
-			coroutine.resume(daemonTable[socketTable[dest_socket]], routeNum, packetType, message, dist)
-			return nil
-		else
-			return routeNum, packetType, message, dist
-		end
+		--if the string.match failed, assume this is not a LyqydNet packet.
+		if not inSocket then return id, msg, dist end
+		os.queueEvent("socket_message", inSocket, id, msg, dist)
+		return false
 	end
 end
