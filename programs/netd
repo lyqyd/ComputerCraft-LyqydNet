@@ -13,7 +13,6 @@ local function readHosts()
 end
 
 local function saveHosts()
-	if net.daemonTable.routed then coroutine.resume(net.daemonTable.routed, 0, "SI:stop") end
 	local file = io.open("/etc/hosts", "w" )
 	if file then
 		for rNum, rInfo in ipairs(net.routeTable) do
@@ -27,15 +26,38 @@ local function saveHosts()
 	return false
 end
 
-function netDaemon ()
+local routing, longlink, forwardTable = false, false, {}
+
+function netDaemon()
 	netdExit = false
 	readHosts()
 	while not netdExit do
 		local id, packet = coroutine.yield()
 		local packetType = string.sub(packet, 1, 2)
 		if packetType == "HA" then
-			net.add_route(id, string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), 0, 0)
+			local newRoute = net.add_route(id, string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), 0, 0)
 			saveHosts()
+			if routing then
+				local string = os.computerID()..":0,0;R "..os.getComputerLabel()..">"
+				for rNum, rInfo in ipairs(net.routeTable) do
+					if rNum ~= newRoute then
+						string = string..rInfo.idNum..":"..os.computerID()..","..(rInfo.cost + 1)..";"..rInfo.type.." "..rInfo.name..">"
+					end
+				end
+				net.packet_send("HT", newRoute, "4,4;"..string)
+				for rNum, rInfo in ipairs(net.routeTable) do
+					if rInfo.type == "R" and rNum ~= newRoute then
+						string = net.routeTable[newRoute].idNum..":"..os.computerID()..","..(net.routeTable[newRoute].cost + 1)..";"..net.routeTable[newRoute].type.." "..net.routeTable[newRoute].name
+						net.packet_send("HI", rNum, "4,4;"..string)
+					end
+				end
+				--if the computer coming online was a router that didn't respond to a forwarded packet, forward the packet again.
+				for pNum, pContents in ipairs(forwardTable) do
+					if pContents.dest == id then
+						rednet.send(id, pContents.data)
+					end
+				end
+			end
 		elseif packetType == "HI" then
 			net.add_route(string.match(packet, "HI:(%d+):"), string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), string.match(packet, "%d+:(%d+),"), string.match(packet, ",(%d+);"))
 		elseif packetType == "HQ" then
@@ -52,29 +74,129 @@ function netDaemon ()
 					end
 				end
 				rednet.send(id, packet)
+			elseif routing then
+				if string.match(packet, ":(%a);") == "n" then
+					for rNum, rInfo in ipairs(net.routeTable) do
+						--find the computer in question in our routing table and attempt to send it a packet.
+						if string.match(packet, ":%a;(%a+)") == rInfo.name then
+							rednet.send(rInfo.idNum, packet)
+							break
+						end
+					end
+				elseif string.match(packet, ":(%a);") == "i" then
+					--if we have the ID, just send the packet.
+					rednet.send(tonumber(string.match(packet, ":%a;(%d+)")), packet)
+				end
 			end
 		elseif packetType == "HR" then
+			--host removal.
 			local routeNum = net.routeFromCID(string.match(packet, ":(%d+)"))
-			if net.routeFromCID(hNum) then
+			if routeNum then
 				net.remove_route(routeNum)
 				for cNum, cInfo in pairs(connection.connectionTable) do
 					if cInfo.route == routeNum then
 						connection.connectionTable[cNum] = false
 					end
 				end
+				if routing then
+					for rNum, rInfo in ipairs(net.routeTable) do
+						if rInfo.cost == 0 and rInfo.type ~= "R" then
+							--send HR packet to all close non-routers.
+							rednet.send(rInfo.idNum, packet)
+							break
+						end
+					end
+				end
 			end
+			saveHosts()
 		elseif packetType == "HT" then
 			for s in string.gmatch(packet, "(%d+:%d+,%d+;[CTR] %w+)>") do
 				net.add_route(string.match(s, "(%d+):"), string.match(s, ";([CTR]) "), string.match(s, ";[CTR] (%w+)"), string.match(s, ":(%d+),"), string.match(s, ",(%d+);"))
 			end
 			saveHosts()
+		elseif routing and (packetType == "PF" or packetType == "PC") then
+			local destination = tonumber(string.match(packet, ":(%d+),%d+<"))
+			local routeFound = false
+			local oldPacket = packet
+			for rNum, rInfo in ipairs(net.routeTable) do
+				if rInfo.idNum == destination then
+					if rInfo.gateway ~= 0 then destination = rInfo.gateway end
+					if string.match(packet, "P[FC]:%d+,%d+<(%a%a):") == "HI" then
+						--These are host information packets, we must manipulate them as we send them onward so that the routing information is accurate.
+						local head, gateway, cost, tail = string.match(packet, "(P[FC]:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+>)")
+						gateway = os.computerID()
+						cost = cost + 1
+						packet = head..":"..gateway..","..cost..";"..tail
+					end
+					if longlink then
+						packet = "PC"..string.match(packet, "P[FC](:.*)")
+						table.insert(forwardTable, {dest = destination, data = packet})
+					else
+						packet = "PF"..string.match(packet, "P[FC](:.*)")
+					end
+					if packetType == "PC" then
+						rednet.send(id, "PS:"..oldPacket)
+					end
+					rednet.send(destination, packet)
+					routeFound = true
+				end
+			end
+			if not routeFound then net.packet_send("RR", net.routeFromCID(id), "4,4;"..string.match(packet, ":(%d+,%d+)<")..";not_found") end
+		elseif packetType == "PS" then
+			for pNum, pContents in ipairs(forwardTable) do
+				if pContents.data == string.match(packet, "PS:(.*)") then
+					table.remove(forwardTable, pNum)
+					break
+				end
+			end
 		elseif packetType == "SI" then
-			if string.match(packet, ":(%w+)") == "stop" then
+			local instruction = string.match(packet, ":(%w+)")
+			if instruction == "stop" then
 				saveHosts()
+				if routing and #forwardTable > 0 then
+					local file = io.open( "etc/packets", "w" )
+					if file then
+						for pNum, pContents in ipairs( forwardTable ) do
+							file:write( pContents.dest..">"..pContents.data.."\n" )
+						end
+						file:close()
+					end
+				end
 				netdExit = true
+			elseif instruction == "route" then
+				routing = true
+				if fs.exists( "etc/packets" ) then
+					local file = io.open( "etc/packets", "r" )
+					local sLine = file:read()
+					while sLine do
+						table.insert(forwardTable, {dest = string.match(sLine, "(%d+)>.*"), data = string.match(sLine, "%d+>(.*)")})
+						sLine = file:read()
+					end
+					file:close()
+				end
+			elseif instruction == "longlink" then
+				longlink = true
+			elseif instruction == "announce" then
+				local packet = "HA:4,4;"
+				local label = os.getComputerLabel()
+				if label then
+					if turtle then
+						packet = packet.."T "..label
+					else
+						if routing then
+							packet = packet.."R "..label
+						else
+							packet = packet.."C "..label
+						end
+					end
+					rednet.broadcast(packet)
+				end
 			end
 		end
 	end
 end
 
 net.daemonAdd("netd", netDaemon, 4)
+
+
+	

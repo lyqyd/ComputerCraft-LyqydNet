@@ -4,18 +4,7 @@ socketTable = {}
 
 function netInit (_side)
 	--initialize network communications
-	local packet = "HA:4,4;"
-	local label = os.getComputerLabel()
-	if label then
-		if turtle then
-			packet = packet.."T "..label
-		else
-			if daemonTable.routed then
-				packet = packet.."R "..label
-			else
-				packet = packet.."C "..label
-			end
-		end
+	if daemonTable["netd"] then
 		local open = false
 		if not _side then
 			for n,side in pairs(rs.getSides()) do
@@ -29,7 +18,8 @@ function netInit (_side)
 			rednet.open(_side)
 			open = true
 		end
-		if open then return rednet.broadcast(packet) end
+		--keep in mind that netd must be an exception since packets coming to it do not always have route numbers yet.
+		if open then coroutine.resume(daemonTable["netd"], 0, "SI:announce") end
 	end
 	return false
 end
