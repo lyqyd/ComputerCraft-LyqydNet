@@ -26,7 +26,7 @@ local function saveHosts()
 	return false
 end
 
-local routing, longlink, forwardTable = false, false, {}
+local routing, longlink, forwardTable, endpointTable = false, false, {}, {}
 
 function netDaemon()
 	netdExit = false
@@ -61,9 +61,9 @@ function netDaemon()
 		elseif packetType == "HI" then
 			net.add_route(string.match(packet, "HI:(%d+):"), string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), string.match(packet, "%d+:(%d+),"), string.match(packet, ",(%d+);"))
 		elseif packetType == "HQ" then
-			if (string.match(packet, ":(%a);") == "n" and string.match(packet, ":%a;(%a+)") == os.getComputerLabel()) or (string.match(packet, ":(%a);") == "i" and string.match(packet, ":%a;(%d+)") == os.computerID()) then
+			if (string.match(packet, ";(%a):") == "n" and string.match(packet, ";%a:(%a+)") == os.getComputerLabel()) or (string.match(packet, ";(%a):") == "i" and string.match(packet, ";%a:(%d+)") == os.computerID()) then
 				label = os.getComputerLabel()
-				packet = "HA:"
+				packet = "HA:4,4;"
 				if turtle then
 					packet = packet.."T "..label
 				else
@@ -75,17 +75,25 @@ function netDaemon()
 				end
 				rednet.send(id, packet)
 			elseif routing then
-				if string.match(packet, ":(%a);") == "n" then
+				if string.match(packet, ";(%a):") == "n" then
 					for rNum, rInfo in ipairs(net.routeTable) do
 						--find the computer in question in our routing table and attempt to send it a packet.
-						if string.match(packet, ":%a;(%a+)") == rInfo.name then
+						if string.match(packet, ";%a:(%a+)") == rInfo.name then
 							rednet.send(rInfo.idNum, packet)
+							net.remove_route(rNum)
 							break
 						end
 					end
-				elseif string.match(packet, ":(%a);") == "i" then
+				elseif string.match(packet, ";(%a):") == "i" then
 					--if we have the ID, just send the packet.
-					rednet.send(tonumber(string.match(packet, ":%a;(%d+)")), packet)
+					rednet.send(tonumber(string.match(packet, ";%a:(%d+)")), packet)
+					net.remove_route(net.routeFromCID(string.match(packet, ";%a:(%d+)")))
+				end
+			else
+				if string.match(packet, ";(%a):") == "n" then
+					net.remove_route(net.routeFromName(string.match(packet, ";%a:(%a+)")))
+				elseif string.match(packet, ";(%a):") == "i" then
+					net.remove_route(net.routeFromCID(string.match(packet, ";%a:(%d+)")))
 				end
 			end
 		elseif packetType == "HR" then
@@ -120,7 +128,7 @@ function netDaemon()
 			local oldPacket = packet
 			for rNum, rInfo in ipairs(net.routeTable) do
 				if rInfo.idNum == destination then
-					if rInfo.gateway ~= 0 then destination = rInfo.gateway end
+					if rInfo.cost ~= 0 then destination = rInfo.gateway end
 					if string.match(packet, "P[FC]:%d+,%d+<(%a%a):") == "HI" then
 						--These are host information packets, we must manipulate them as we send them onward so that the routing information is accurate.
 						local head, gateway, cost, tail = string.match(packet, "(P[FC]:%d+,%d+<HI:%d+):(%d+),(%d+);([CTR] %a+>)")
@@ -137,6 +145,11 @@ function netDaemon()
 					if packetType == "PC" then
 						rednet.send(id, "PS:"..oldPacket)
 					end
+					if rInfo.cost == 0 then
+						--if this is an endpoint, add the packet to the table to await confirmation.
+						table.insert(endpointTable, {dest = destination, data = packet})
+						net.networkDaemonTimeout = os.startTimer(2)
+					end
 					rednet.send(destination, packet)
 					routeFound = true
 				end
@@ -144,8 +157,21 @@ function netDaemon()
 			if not routeFound then net.packet_send("RR", net.routeFromCID(id), "4,4;"..string.match(packet, ":(%d+,%d+)<")..";not_found") end
 		elseif packetType == "PS" then
 			for pNum, pContents in ipairs(forwardTable) do
-				if pContents.data == string.match(packet, "PS:(.*)") then
+				if pContents.data == string.match(packet, "PS:4,4;(.*)") then
 					table.remove(forwardTable, pNum)
+					break
+				end
+			end
+			for pNum, pContents in ipairs(endpointTable) do
+				if pContents.data == string.match(packet, "PS:4,4;(.*)") then
+					table.remove(endpointTable, pNum)
+					break
+				end
+			end
+		elseif packetType == "HK" then
+			for pNum, pContents in ipairs(endpointTable) do
+				if pContents.data == string.match(packet, "HK:4,4;(.*)") then
+					table.remove(endpointTable, pNum)
 					break
 				end
 			end
@@ -190,6 +216,16 @@ function netDaemon()
 						end
 					end
 					rednet.broadcast(packet)
+				end
+			elseif instruction == "timeout" then
+				for pNum, pContents in ipairs(endpointTable) do
+					for rNum, rInfo in ipairs(net.routeTable) do
+						if rInfo.type == "R" then
+							net.packet_send("HQ", rNum, "4,4;i:"..pContents.dest)
+						end
+					end
+					rednet.send(pContents.dest, "HQ:4,4;i:"..pContents.dest)
+					net.remove_route(net.routeFromCID(pContents.dest))
 				end
 			end
 		end

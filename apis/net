@@ -1,6 +1,7 @@
 routeTable = {}
 daemonTable = {}
 socketTable = {}
+networkDaemonWakeup = nil
 
 function netInit (_side)
 	--initialize network communications
@@ -144,7 +145,7 @@ function message(id, msg, dist)
 	end
 	if packetType == "PF" or packetType == "PC" then
 		if tonumber(string.match(msg, ":(%d+),%d+<")) == os.computerID() then
-			if packetType == "PC" then packet_send("PS", routeFromCID(id), msg) end
+			if packetType == "PC" then rednet.send(id, "PS:4,4;".. msg) else rednet.send(id, "HK:4,4;"..msg) end
 			os.queueEvent("rednet_message", string.match(msg, ":%d+,(%d+)<"), string.match(msg, "<(.*)>"), false)
 			return false
 		else
