@@ -37,7 +37,7 @@ local oldpull = os.pullEvent
 function newPull(filter)
 	while true do
 		local event = {oldpull(filter)}
-		if event[1] == "socket_message" then
+		if event[1] == "socket_inbound" then
 			result = {coroutine.resume(sockd, event[2], event[3], event[4], event[5])}
 			if result[2] then
 				result[1] = "socket_message"

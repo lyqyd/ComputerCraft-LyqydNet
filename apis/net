@@ -158,7 +158,7 @@ function message(id, msg, dist)
 			os.queueEvent("rednet_message", string.match(msg, ":%d+,(%d+)<"), string.match(msg, "<(.*)>"), false)
 			return false
 		else
-			os.queueEvent("socket_message", 4, id, msg, false)
+			os.queueEvent("socket_inbound", 4, id, msg, false)
 			return false
 		end
 	elseif packetType == "HA" or packetType == "HT" or packetType == "HI" then
@@ -168,7 +168,7 @@ function message(id, msg, dist)
 	else
 		--if the string.match failed, assume this is not a LyqydNet packet.
 		if not inSocket then return id, msg, dist end
-		os.queueEvent("socket_message", inSocket, id, msg, dist)
+		os.queueEvent("socket_inbound", inSocket, id, msg, dist)
 		return false
 	end
 end
