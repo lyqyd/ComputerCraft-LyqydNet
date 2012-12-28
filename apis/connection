@@ -30,6 +30,7 @@ pTypeLookup = {
 	textColor = "TF",
 	textBackground = "TK",
 	textIsColor = "TA",
+	event = "EV",
 	instruction = "SI",
 	SQ = "query",
 	SR = "response",
@@ -61,6 +62,7 @@ pTypeLookup = {
 	TF = "textColor",
 	TK = "textBackground",
 	TA = "textIsColor",
+	EV = "event",
 	SI = "instruction",
 }
 
