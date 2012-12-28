@@ -2,6 +2,6 @@ if turtle then
 	return false
 else
 	if net.daemonTable.netd then
-		coroutine.resume(net.daemonTable.netd, o, "SI:route")
+		coroutine.resume(net.daemonTable.netd, 0, "SI:route")
 	end
 end
