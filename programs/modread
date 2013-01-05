@@ -8,7 +8,7 @@ function newPull(filter)
 			if result then
 				return "rednet_message", unpack(result)
 			end
-		elseif event[1] == "timer" and event[2] == net.networkDaemonWakeup then
+		elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
 			coroutine.resume(net.daemonTable.netd, 0, "SI:timeout")
 		else
 			return unpack(event)
