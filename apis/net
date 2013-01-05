@@ -47,14 +47,14 @@ end
 
 function routeFromName (name)
 	for rNum,rInfo in ipairs(routeTable) do
-		if rInfo.name == tostring(name) then return rNum end
+		if rInfo and rInfo.name == tostring(name) then return rNum end
 	end
 	return false
 end
 
 function routeFromCID (compID)
 	for rNum,rInfo in ipairs(routeTable) do
-		if rInfo.idNum == tonumber(compID) then return rNum end
+		if rInfo and rInfo.idNum == tonumber(compID) then return rNum end
 	end
 	return false
 end
@@ -100,15 +100,17 @@ function add_route (idNumber, compType, compName, gateway, cost)
 		cost = 0
 	end
 	for rNum,rInfo in ipairs(routeTable) do
-		if idNumber == rInfo.idNum then
-			if rInfo.type ~= compType then
-				rInfo.type = compType
+		if rInfo then
+			if idNumber == rInfo.idNum then
+				if rInfo.type ~= compType then
+					rInfo.type = compType
+				end
+				if rInfo.cost > cost then
+					rInfo.gateway = gateway
+					rInfo.cost = cost
+				end
+				return rNum
 			end
-			if rInfo.cost > cost then
-				rInfo.gateway = gateway
-				rInfo.cost = cost
-			end
-			return rNum
 		end
 	end
 	local route = {}
