@@ -155,8 +155,8 @@ function message(id, msg, dist)
 			return false
 		end
 	elseif packetType == "HA" or packetType == "HT" or packetType == "HI" then
-		if socketTable[4] then
-			coroutine.resume(daemonTable[socketTable[4]], id, message)
+		if daemonTable.netd then
+			coroutine.resume(daemonTable.netd, id, msg)
 		end
 	else
 		--if the string.match failed, assume this is not a LyqydNet packet.
