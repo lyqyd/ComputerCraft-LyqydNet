@@ -1,4 +1,5 @@
 local oldpull = os.pullEvent
+local oldrs = rednet.send
 
 function newPull(filter)
 	while true do
@@ -18,6 +19,13 @@ function newPull(filter)
 	end
 end
 
+function newSend(id, message)
+	if net.routeFromCID(id) then
+		net.packet_send("RM", net.routeFromCID(id), message)
+	end
+end
+
 rawset(os, "pullEvent", newPull)
+rawset(rednet, "send", newSend)
 
 shell.run("socketd")

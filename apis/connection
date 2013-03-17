@@ -32,6 +32,7 @@ pTypeLookup = {
 	textIsColor = "TA",
 	event = "EV",
 	instruction = "SI",
+	rednet = "RM"
 	SQ = "query",
 	SR = "response",
 	SP = "data",
@@ -64,6 +65,7 @@ pTypeLookup = {
 	TA = "textIsColor",
 	EV = "event",
 	SI = "instruction",
+	RM = "rednet"
 }
 
 

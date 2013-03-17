@@ -2,6 +2,7 @@ routeTable = {}
 daemonTable = {}
 socketTable = {}
 networkDaemonWakeup = nil
+local modemSide
 
 function netInit (_side)
 	--initialize network communications
@@ -10,12 +11,14 @@ function netInit (_side)
 		if not _side then
 			for n,side in pairs(rs.getSides()) do
 				if peripheral.getType(side) == "modem" then
+					modemSide = side
 					rednet.open(side)
 					open = true
 					break
 				end
 			end
 		else
+			modemSide = _side
 			rednet.open(_side)
 			open = true
 		end
@@ -79,13 +82,17 @@ function packet_send (pType, routeNum, message)
 	routeNum = tonumber(routeNum)
 	if routeTable[routeNum] then
 		if routeTable[routeNum].gateway ~= 0 then
-			return rednet.send(routeTable[routeNum].gateway, "PF:"..routeTable[routeNum].idNum..","..os.computerID().."<"..pType..":"..tostring(message)..">")
+			return peripheral.call(modemSide, "transmit", routeTable[routeNum].gateway, os.computerID(), "PF:"..routeTable[routeNum].idNum..","..os.computerID().."<"..pType..":"..tostring(message)..">")
 		end
 		if routeTable[routeNum].type == "T" then
 			coroutine.resume(daemonTable.netd, 0, "turtlepacket>"..routeTable[routeNum].idNum.." "..pType..":"..tostring(message))
 		end
-		return rednet.send(routeTable[routeNum].idNum, pType..":"..tostring(message))
+		return peripheral.call(modemSide, "transmit", routeTable[routeNum].idNum, os.computerID(), pType..":"..tostring(message))
 	else return false end
+end
+
+function raw_send (id, message)
+	return peripheral.call(modemSide, "transmit", id, os.computerID(), message)
 end
 
 function add_route (idNumber, compType, compName, gateway, cost)
@@ -161,6 +168,8 @@ function message(id, msg, dist)
 		if daemonTable.netd then
 			coroutine.resume(daemonTable.netd, id, msg)
 		end
+	elseif packetType == "RM" then
+		return id, string.match(msg, "RM:(.*)"), dist
 	else
 		--if the string.match failed, assume this is not a LyqydNet packet.
 		if not inSocket then return id, msg, dist end

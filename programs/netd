@@ -54,7 +54,7 @@ function netDaemon()
 				--if the computer coming online was a router that didn't respond to a forwarded packet, forward the packet again.
 				for pNum, pContents in ipairs(forwardTable) do
 					if pContents.dest == id then
-						rednet.send(id, pContents.data)
+						net.raw_send(id, pContents.data)
 					end
 				end
 			end
@@ -90,20 +90,20 @@ function netDaemon()
 						packet = packet.."C "..label
 					end
 				end
-				rednet.send(id, packet)
+				net.raw_send(id, packet)
 			elseif routing then
 				if string.match(packet, ";(%a):") == "n" then
 					for rNum, rInfo in ipairs(net.routeTable) do
 						--find the computer in question in our routing table and attempt to send it a packet.
 						if rInfo and string.match(packet, ";%a:(%a+)") == rInfo.name then
-							rednet.send(rInfo.idNum, packet)
+							net.raw_send(rInfo.idNum, packet)
 							net.remove_route(rNum)
 							break
 						end
 					end
 				elseif string.match(packet, ";(%a):") == "i" then
 					--if we have the ID, just send the packet.
-					rednet.send(tonumber(string.match(packet, ";%a:(%d+)")), packet)
+					net.raw_send(tonumber(string.match(packet, ";%a:(%d+)")), packet)
 					net.remove_route(net.routeFromCID(string.match(packet, ";%a:(%d+)")))
 				end
 			else
@@ -127,7 +127,7 @@ function netDaemon()
 					for rNum, rInfo in ipairs(net.routeTable) do
 						if rInfo and rInfo.cost == 0 and rInfo.type ~= "R" then
 							--send HR packet to all close non-routers.
-							rednet.send(rInfo.idNum, packet)
+							net.raw_send(rInfo.idNum, packet)
 							break
 						end
 					end
@@ -160,14 +160,14 @@ function netDaemon()
 						packet = "PF"..string.match(packet, "P[FC](:.*)")
 					end
 					if packetType == "PC" then
-						rednet.send(id, "PS:"..oldPacket)
+						net.raw_send(id, "PS:"..oldPacket)
 					end
 					if rInfo.cost == 0 then
 						--if this is an endpoint, add the packet to the table to await confirmation.
 						table.insert(endpointTable, {dest = destination, data = packet})
 						net.networkDaemonTimeout = os.startTimer(2)
 					end
-					rednet.send(destination, packet)
+					net.raw_send(destination, packet)
 					routeFound = true
 				end
 			end
@@ -252,7 +252,7 @@ function netDaemon()
 							net.packet_send("HQ", rNum, "4,4;i:"..pContents.dest)
 						end
 					end
-					rednet.send(pContents.dest, "HQ:4,4;i:"..pContents.dest)
+					net.raw_send(pContents.dest, "HQ:4,4;i:"..pContents.dest)
 					net.remove_route(net.routeFromCID(pContents.dest))
 					table.insert(infoWaitTable, pContents.dest)
 					net.networkDaemonTimeout = os.startTimer(2)
