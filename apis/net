@@ -81,6 +81,9 @@ function packet_send (pType, routeNum, message)
 		if routeTable[routeNum].gateway ~= 0 then
 			return rednet.send(routeTable[routeNum].gateway, "PF:"..routeTable[routeNum].idNum..","..os.computerID().."<"..pType..":"..tostring(message)..">")
 		end
+		if routeTable[routeNum].type == "T" then
+			coroutine.resume(daemonTable.netd, 0, "turtlepacket>"..routeTable[routeNum].idNum.." "..pType..":"..tostring(message))
+		end
 		return rednet.send(routeTable[routeNum].idNum, pType..":"..tostring(message))
 	else return false end
 end

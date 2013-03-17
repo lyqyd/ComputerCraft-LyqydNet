@@ -234,6 +234,9 @@ function netDaemon()
 					end
 					rednet.broadcast(packet)
 				end
+			elseif string.match(instruction, "(%a+)>") == "turtlepacket" then
+				table.insert(endpointTable, {dest = string.match(instruction, ">(%d+) "), data = string.match(instruction, ">%d+ (.*)")})
+				net.networkDaemonTimeout = os.startTimer(2)
 			elseif instruction == "timeout" then
 				for hNum, hContents in ipairs(infoWaitTable) do
 					for rNum, rInfo in ipairs(net.routeTable) do
@@ -261,4 +264,3 @@ function netDaemon()
 end
 
 net.daemonAdd("netd", netDaemon, 4)
-
