@@ -26,6 +26,21 @@ local function saveHosts()
 	return false
 end
 
+local function processPacketHeader(packet)
+	local pType, inSocket, fromSocket, body = string.match(packet, "$(%a%a):(%d+),(%d+);(.*)")
+	return pType, inSocket, fromSocket, body
+end
+
+local function processForwardedPacketHeader(packet)
+	local pType, toHost, fromHost, body = string.match(packet, "$(%a%a):(%d+),(%d+)<(.*)>")
+	return pType, toHost, fromHost, body
+end
+
+local function processHostInformation(hostString)
+	local id, gateway, cost, type, name = string.match(hostString, "(%d+):(%d+),(%d+);([CTR]) (%w+)")
+	return id, type, name, gateway, cost
+end
+
 local routing, longlink, forwardTable, endpointTable, infoWaitTable = false, false, {}, {}, {}
 
 function netDaemon()
@@ -59,7 +74,8 @@ function netDaemon()
 				end
 			end
 		elseif packetType == "HI" then
-			local routeNum = net.add_route(string.match(packet, "HI:4,4;(%d+):"), string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), string.match(packet, "%d+:(%d+),"), string.match(packet, "%d+:%d+,(%d+);"))
+			local _, _, _, body = processPacketHeader(packet)
+			local routeNum = net.add_route(processHostInformation(body))
 			if routing then
 				for _, host in ipairs(infoWaitTable) do
 					if tonumber(string.match(packet, "%d+:(%d+),")) == host then
@@ -75,8 +91,11 @@ function netDaemon()
 				end
 			end
 		elseif packetType == "HC" then
-			local routeNum = net.add_route(string.match(packet, "HC:4,4;(%d+):"), string.match(packet, ";([CTR]) "), string.match(packet, ";[CTR] (%w+)"), string.match(packet, "%d+:(%d+),"), string.match(packet, "%d+:%d+,(%d+);"))
-			net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name = string.match(packet, "%d+:(%d+),"), string.match(packet, "%d+:%d+,(%d+);"), string.match(packet, ";[CTR] (%w+)")
+			local _, _, _, body = processPacketHeader(packet)
+			local id, type, name, gateway, cost = processHostInformation(body)
+			local routeNum = net.add_route(id, type, name, gateway, cost)
+			net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name = gateway, cost, name
+			saveHosts()
 		elseif packetType == "HQ" then
 			if (string.match(packet, ";(%a):") == "n" and string.match(packet, ";%a:(%a+)") == os.getComputerLabel()) or (string.match(packet, ";(%a):") == "i" and string.match(packet, ";%a:(%d+)") == os.computerID()) then
 				label = os.getComputerLabel()
@@ -136,7 +155,7 @@ function netDaemon()
 			saveHosts()
 		elseif packetType == "HT" then
 			for s in string.gmatch(packet, "(%d+:%d+,%d+;[CTR] %w+)>") do
-				net.add_route(string.match(s, "(%d+):"), string.match(s, ";([CTR]) "), string.match(s, ";[CTR] (%w+)"), string.match(s, ":(%d+),"), string.match(s, ",(%d+);"))
+				net.add_route(processHostInformation(s))
 			end
 			saveHosts()
 		elseif routing and (packetType == "PF" or packetType == "PC") then
