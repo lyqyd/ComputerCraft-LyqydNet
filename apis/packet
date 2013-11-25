@@ -1,0 +1,107 @@
+types = {
+	query = "SQ",
+	response = "SR",
+	data = "SP",
+	done = "SB",
+	close = "SC",
+	fileQuery = "FQ",
+	fileSend = "FS",
+	fileResponse = "FR",
+	fileHeader = "FH",
+	fileData = "FD",
+	fileEnd = "FE",
+	fileCopy = "FC",
+	fileDelete = "FM",
+	fileMove = "FV",
+	fileMakeDirectory = "FK",
+	fileList = "FL",
+	fileInformation = "FI",
+	fileStatus = "FZ",
+	textWrite = "TW",
+	textCursorPos = "TC",
+	textGetCursorPos = "TG",
+	textGetSize = "TD",
+	textInfo = "TI",
+	textClear = "TE",
+	textClearLine = "TL",
+	textScroll = "TS",
+	textBlink = "TB",
+	textColor = "TF",
+	textBackground = "TK",
+	textIsColor = "TA",
+	event = "EV",
+	instruction = "SI",
+	rednet = "RM"
+	SQ = "query",
+	SR = "response",
+	SP = "data",
+	SB = "done",
+	SC = "close",
+	FQ = "fileQuery",
+	FS = "fileSend",
+	FR = "fileResponse",
+	FH = "fileHeader",
+	FD = "fileData",
+	FE = "fileEnd",
+	FC = "fileCopy",
+	FM = "fileDelete",
+	FV = "fileMove",
+	FK = "fileMakeDirectory",
+	FL = "fileList",
+	FI = "fileInformation",
+	FZ = "fileStatus",
+	TW = "textWrite",
+	TC = "textCursorPos",
+	TG = "textGetCursorPos",
+	TD = "textGetSize",
+	TI = "textInfo",
+	TE = "textClear",
+	TL = "textClearLine",
+	TS = "textScroll",
+	TB = "textBlink",
+	TF = "textColor",
+	TK = "textBackground",
+	TA = "textIsColor",
+	EV = "event",
+	SI = "instruction",
+	RM = "rednet"
+}
+
+local Packet = {
+	tostring = function(self)
+		return self.pType..":"..self.toSock..","..self.fromSock..";"..self.payload
+	end,
+	enacapsulate = function(self, longlink)
+		return (longlink and "PS" or "PF")..self.destination..","..self.origin.."<"..self:tostring()..">"
+	end,
+}
+
+local pmetatable = {
+	__index = Packet,
+	__tostring = Packet.tostring,
+}
+
+function new(packetType, destination, body, toSocket, fromSocket)
+	local instance = {
+		pType = packetType,
+		payload = body,
+		destination = destination,
+		toSock = toSocket,
+		fromSock = fromSocket,
+		origin = os.computerID(),
+	}
+	setmetatable(instance, pmetatable)
+	return instance
+end
+
+function reconstruct(packetString, destination, origin)
+	local pType = string.sub(packetString, 1, 2)
+	local instance = packet.new()
+	if pType == "PS" or pType == "PF" then
+		instance.destination, instance.origin, packetString = string.match(packetString, "^P[FS]:(%d+),(%d+)<(.*)>")
+	else
+		instance.destination, instance.origin = destination, origin
+	end
+	instance.pType, instance.toSock, instance.fromSock, instance.payload = string.match(packet, "^(%a%a):(%d+),(%d+);(.*)")
+	return instance
+end
