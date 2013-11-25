@@ -27,12 +27,12 @@ local function saveHosts()
 end
 
 local function processPacketHeader(packet)
-	local pType, inSocket, fromSocket, body = string.match(packet, "$(%a%a):(%d+),(%d+);(.*)")
+	local pType, inSocket, fromSocket, body = string.match(packet, "^(%a%a):(%d+),(%d+);(.*)")
 	return pType, inSocket, fromSocket, body
 end
 
 local function processForwardedPacketHeader(packet)
-	local pType, toHost, fromHost, body = string.match(packet, "$(%a%a):(%d+),(%d+)<(.*)>")
+	local pType, toHost, fromHost, body = string.match(packet, "^(%a%a):(%d+),(%d+)<(.*)>")
 	return pType, toHost, fromHost, body
 end
 
