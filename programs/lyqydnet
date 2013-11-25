@@ -1,0 +1,85 @@
+local oldPeriphCall = peripheral.call
+
+peripheral.call = function(...)
+	if not shell then
+		return false
+		--our logic here, since this should be inside rednet coroutine
+	else
+		return oldPeriphCall(...)
+	end
+end
+
+local modemState = {}
+
+local validSides = {}
+for k, v in pairs(rs.getSides()) do
+	validSides[v] = true
+end
+
+local function validateSide(side)
+	if type(side) ~= "string" then
+		error("string expected")
+	end
+	if not validSides[side] then
+		error("Invalid side")
+	end
+	if peripheral.getType(side) ~= "modem" then	
+		error("No modem on "..side.." side")
+	end
+	return true
+end
+
+function rednet.open(side)
+	if validateSide(side) then
+		modemState[side] = true
+		peripheral.call(side, "open", os.getComputerID())
+		peripheral.call(side, "open", 65535)
+	end
+end
+
+function rednet.close(side)
+	if validateSide(side) then
+		modemState[side] = false
+		peripheral.call(side, "close", os.getComputerID())
+		peripheral.call(side, "close", 65535)
+	end
+end
+
+function rednet.isOpen(side)
+	if validateSide(side) then
+		return modemState[side]
+	end
+end
+
+function rednet.send(recipient, message)
+	for _, side in pairs(rs.getSides()) do
+		if rednet.isOpen(side) then
+			if net.routeFromCID(recipient) then
+				net.packet_send("RM", net.routeFromCID(recipient), message)
+			else
+				peripheral.call(side, "transmit", recipient, os.getComputerID(), message)
+			end
+			return
+		end
+	end
+	error("No open sides")
+end
+
+function rednet.broadcast(message)
+	return rednet.send(65535, message)
+end
+
+local function processPacketHeader(packet)
+	local pType, inSocket, fromSocket, body = string.match(packet, "^(%a%a):(%d+),(%d+);(.*)")
+	return pType, inSocket, fromSocket, body
+end
+
+local function processForwardedPacketHeader(packet)
+	local pType, toHost, fromHost, body = string.match(packet, "^(%a%a):(%d+),(%d+)<(.*)>")
+	return pType, toHost, fromHost, body
+end
+
+local function processHostInformation(hostString)
+	local id, gateway, cost, type, name = string.match(hostString, "(%d+):(%d+),(%d+);([CTR]) (%w+)")
+	return id, type, name, gateway, cost
+end
