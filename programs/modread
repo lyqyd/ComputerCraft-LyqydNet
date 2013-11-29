@@ -4,10 +4,10 @@ local oldrs = rednet.send
 function newPull(filter)
 	while true do
 		local event = {oldpull()}
-		if event[1] == "rednet_message" then
-			result = {net.message(event[2], event[3], event[4])}
+		if event[1] == "modem_message" then
+			result = {net.message(event[3], event[5], event[6])}
 			if result then
-				return "rednet_message", unpack(result)
+				return unpack(result)
 			end
 		elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
 			coroutine.resume(net.daemonTable.netd, 0, "SI:timeout")
