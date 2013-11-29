@@ -78,6 +78,19 @@ function CIDFromRoute (route)
 	end
 end
 
+function send(pack)
+	local routeNum = net.routeFromCID(pack.destination)
+	if routeNum then
+		local route = net.routeTable[routeNum]
+		if route.cost > 0 then
+			return peripheral.call(net.modemSide, "transmit", route.gateway, os.computerID(), pack:encapsulate())
+		else
+			return peripheral.call(net.modemSide, "transmit", route.idNum, os.computerID(), pack:tostring())
+		end
+	end
+	return false
+end
+
 function packet_send (pType, routeNum, message)
 	routeNum = tonumber(routeNum)
 	if routeTable[routeNum] then
