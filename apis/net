@@ -23,7 +23,7 @@ function netInit (_side)
 			open = true
 		end
 		--keep in mind that netd must be an exception since packets coming to it do not always have route numbers yet.
-		if open then coroutine.resume(daemonTable["netd"], 0, "SI:announce") end
+		if open then coroutine.resume(daemonTable["netd"], packet.new("SI", 0, "announce")) end
 	end
 	return false
 end
@@ -78,30 +78,23 @@ function CIDFromRoute (route)
 	end
 end
 
-function send(pack)
+function send(pack, ll)
 	local routeNum = net.routeFromCID(pack.destination)
 	if routeNum then
 		local route = net.routeTable[routeNum]
 		if route.cost > 0 then
-			return peripheral.call(net.modemSide, "transmit", route.gateway, os.computerID(), pack:encapsulate())
+			return peripheral.call(modemSide, "transmit", route.gateway, os.computerID(), pack:encapsulate(ll))
 		else
-			return peripheral.call(net.modemSide, "transmit", route.idNum, os.computerID(), pack:tostring())
+			if net.routeTable[net.routeFromCID(pack.destination)].type == "T" then
+				coroutine.resume(daemonTable.netd, 0, "turtlepacket>"..pack.destination.." "..pack:tostring())
+			else
+				return peripheral.call(modemSide, "transmit", route.idNum, os.computerID(), pack:tostring())
+			end
 		end
+	elseif pack.type == "RM" then
+		return peripheral.call(modemSide, "transmit", pack.destination, os.computerID(), pack.payload)
 	end
 	return false
-end
-
-function packet_send (pType, routeNum, message)
-	routeNum = tonumber(routeNum)
-	if routeTable[routeNum] then
-		if routeTable[routeNum].gateway ~= 0 then
-			return peripheral.call(modemSide, "transmit", routeTable[routeNum].gateway, os.computerID(), "PF:"..routeTable[routeNum].idNum..","..os.computerID().."<"..pType..":"..tostring(message)..">")
-		end
-		if routeTable[routeNum].type == "T" then
-			coroutine.resume(daemonTable.netd, 0, "turtlepacket>"..routeTable[routeNum].idNum.." "..pType..":"..tostring(message))
-		end
-		return peripheral.call(modemSide, "transmit", routeTable[routeNum].idNum, os.computerID(), pType..":"..tostring(message))
-	else return false end
 end
 
 function raw_send (id, message)
@@ -163,30 +156,28 @@ end
 
 function message(id, msg, dist)
 	local packetType, inSocket, foreignSocket, body
-	if msg then
-		--packetType must be grabbed separately, as forwared packets do not follow the same structure.
-		packetType = string.sub(msg, 1, 2)
-		inSocket = string.match(msg, "^%a%a:(%d+),%d+;")
+	--pass the local computer ID as the destination, forwarded packets will automatically reassign the actual destination.
+	local pack = packet.reconstruct(msg, os.computerID(), id, dist)
+	if not pack.type then
+		--does not match.
+		return id, msg, dist
 	end
-	if packetType == "PF" or packetType == "PC" then
-		if tonumber(string.match(msg, ":(%d+),%d+<")) == os.computerID() then
+	if pack.type == "PF" or pack.type == "PC" then
+		if pack.destination == os.computerID() then
 			if packetType == "PC" then rednet.send(id, "PS:4,4;".. msg) else rednet.send(id, "HK:4,4;"..msg) end
-			os.queueEvent("rednet_message", string.match(msg, ":%d+,(%d+)<"), string.match(msg, "<(.*)>"), false)
+			os.queueEvent("modem_message", modemSide, pack.destination, pack.origin, pack:tostring(), false)
 			return false
 		else
-			os.queueEvent("socket_inbound", 4, id, msg, false)
+			return "packet_inbound", pack
+		end
+	elseif pack.type == "HA" or pack.type == "HT" or pack.type == "HI" then
+		if daemonTable.netd then
+			coroutine.resume(daemonTable.netd, pack)
 			return false
 		end
-	elseif packetType == "HA" or packetType == "HT" or packetType == "HI" then
-		if daemonTable.netd then
-			coroutine.resume(daemonTable.netd, id, msg)
-		end
-	elseif packetType == "RM" then
-		return id, string.match(msg, "RM:(.*)"), dist
+	elseif pack.type == "RM" then
+		return "rednet_message", pack.payload
 	else
-		--if the string.match failed, assume this is not a LyqydNet packet.
-		if not inSocket then return id, msg, dist end
-		os.queueEvent("socket_inbound", inSocket, id, msg, dist)
-		return false
+		return "packet_inbound", pack
 	end
 end
