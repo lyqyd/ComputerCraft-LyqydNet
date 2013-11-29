@@ -1,31 +1,31 @@
 function get (conn, remoteFile, localFile, timeout)
-	if not connection.send(conn, "fileQuery", remoteFile) then return false end
+	if not conn:send("fileQuery", remoteFile) then return false end
 	return receive(conn, localFile, timeout)
 end
 
 function send (conn, localFile)
 	--have already gotten an FQ, need to just send the file now.
 	if fs.exists(localFile) then
-		if not connection.send(conn, "fileHeader", localFile) then return false end
+		if not conn:send("fileHeader", localFile) then return false end
 		local file = io.open( localFile, "r" )
 		local contents = file:read("*a")
 		if contents then
-			connection.send(conn, "fileData", contents)
+			conn:send("fileData", contents)
 		end
 		file:close()
 	else
-		connection.send(conn, "fileHeader", "fileNotFound")
+		conn:send("fileHeader", "fileNotFound")
 		return false
 	end
-	connection.send(conn, "fileEnd", "end")
+	conn:send("fileEnd", "end")
 	return true
 end
 
 function put (conn, localFile, remoteFile, timeout)
 	if not fs.exists(localFile) then return false end
-	if not connection.send(conn, "fileSend", remoteFile) then return false end
-	messType, message = connection.awaitResponse(conn, timeout)
-	if messType ~= "fileResponse" or message ~= "ok" then return false end
+	if not conn:send("fileSend", remoteFile) then return false end
+	local response = conn:listen(timeout)
+	if packet.types[repsonse.type] ~= "fileResponse" or response.payload ~= "ok" then return false end
 	return send(conn, localFile)
 end
 
@@ -35,8 +35,10 @@ function receive (conn, lFile, timeout)
 	local header = nil
 	local fileData = nil
 	while true do
-		messType, message = connection.awaitResponse(conn, timeout)
-		if messType == "fileEnd" then
+		local response = conn:listen(timeout)
+		if response == false then
+			return false
+		elseif packet.types[response.type] == "fileEnd" then
 			if lFile then file = io.open( lFile, "w" ) end
 			if file then
 				if not fileData then fileData = "" end
@@ -46,13 +48,11 @@ function receive (conn, lFile, timeout)
 			else
 				return fileData, header
 			end
-		elseif messType == "fileHeader" then
-			header = message
+		elseif packet.types[response.type] == "fileHeader" then
+			header = response.payload
 			if header == "fileNotFound" then return true end
-		elseif messType == "fileData" then
-			fileData = message
-		elseif messType == false then
-			return false
+		elseif packet.types[response.type] == "fileData" then
+			fileData = response.payload
 		end
 	end
 end
