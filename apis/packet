@@ -69,10 +69,14 @@ types = {
 
 local Packet = {
 	tostring = function(self)
-		return self.type..":"..self.toSock..","..self.fromSock..";"..self.payload
+		if self.type == "RM" then
+			return self.type..":"..self.payload
+		else
+			return self.type..":"..self.toSock..","..self.fromSock..";"..self.payload
+		end
 	end,
 	enacapsulate = function(self, longlink)
-		return (longlink and "PS" or "PF")..self.destination..","..self.origin.."<"..self:tostring()..">"
+		return (longlink and "PC" or "PF")..self.destination..","..self.origin.."<"..self:tostring()..">"
 	end,
 }
 
@@ -98,11 +102,16 @@ end
 function reconstruct(packetString, destination, origin, distance)
 	local pType = string.sub(packetString, 1, 2)
 	local instance = packet.new()
-	if pType == "PS" or pType == "PF" then
+	if pType == "PC" or pType == "PF" then
+		instance.type = pType
 		instance.destination, instance.origin, packetString = string.match(packetString, "^P[FS]:(%d+),(%d+)<(.*)>")
 	else
 		instance.destination, instance.origin, instance.distance = destination, origin, distance
 	end
-	instance.type, instance.toSock, instance.fromSock, instance.payload = string.match(packet, "^(%a%a):(%d+),(%d+);(.*)")
+	if pType == "RM" then
+		instance.type, instance.payload = string.match(packetString, "^(%a%a):(.*)")
+	elseif packetString then
+		instance.type, instance.toSock, instance.fromSock, instance.payload = string.match(packetString, "^(%a%a):(%d+),(%d+);(.*)")
+	end
 	return instance
 end
