@@ -1,0 +1,124 @@
+function new (conn)
+	local textTable = {}
+	textTable.conn = conn
+	textTable.write = function(text)
+		return textTable.conn:send("textWrite", text)
+	end
+	textTable.clear = function()
+		return textTable.conn:send("textClear", "nil")
+	end
+	textTable.clearLine = function()
+		return textTable.conn:send("textClearLine", "nil")
+	end
+	textTable.getCursorPos = function()
+		if textTable.conn:send("textGetCursorPos", "nil") then
+			local response = textTable.conn:listen(2)
+			if response and packet.types[response.type] == "textInfo" then
+				local x, y = string.match(response.payload, "(%d+),(%d+)")
+				return tonumber(x), tonumber(y)
+			end
+		else return false end
+	end
+	textTable.setCursorPos = function(x, y)
+		return textTable.conn:send("textCursorPos", math.floor(x)..","..math.floor(y))
+	end
+	textTable.setCursorBlink = function(b)
+		if b then
+			return textTable.conn:send("textBlink", "true")
+		else
+			return textTable.conn:send("textBlink", "false")
+		end
+	end
+	textTable.getSize = function()
+		if textTable.conn:send("textGetSize", "nil") then
+			local response = textTable.conn:listen(2)
+			if response and packet.types[response.type] == "textInfo" then
+				local x, y = string.match(response.payload, "(%d+),(%d+)")
+				return tonumber(x), tonumber(y)
+			end
+		else return false end
+	end
+	textTable.scroll = function(lines)
+		return textTable.conn:send("textScroll", lines)
+	end
+	textTable.isColor = function()
+		if textTable.conn:send("textIsColor", "nil") then
+			local response = textTable.conn:listen(2)
+			if response and packet.types[response.type] == "textInfo" then
+				if response.payload == "true" then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	textTable.isColour = textTable.isColor
+	textTable.setTextColor = function(color)
+		return textTable.conn:send("textColor", tostring(color))
+	end
+	textTable.setTextColour = textTable.setTextColor
+	textTable.setBackgroundColor = function(color)
+		return textTable.conn:send("textBackground", tostring(color))
+	end
+	textTable.setBackgroundColour = textTable.setBackgroundColor
+	return textTable
+end
+
+function process(conn, pack)
+	if not packet.types[pack.type] then return false end
+	if packet.types[pack.type] == "textWrite" and pack.payload then
+		term.write(pack.payload)
+	elseif packet.types[pack.type] == "textClear" then
+		term.clear()
+	elseif packet.types[pack.type] == "textClearLine" then
+		term.clearLine()
+	elseif packet.types[pack.type] == "textGetCursorPos" then
+		local x, y = term.getCursorPos()
+		conn:send("textInfo", math.floor(x)..","..math.floor(y))
+	elseif packet.types[pack.type] == "textCursorPos" then
+		local x, y = string.match(pack.payload, "(%d+),(%d+)")
+		term.setCursorPos(tonumber(x), tonumber(y))
+	elseif packet.types[pack.type] == "textBlink" then
+		if pack.payload == "true" then
+			term.setCursorBlink(true)
+		else
+			term.setCursorBlink(false)
+		end
+	elseif packet.types[pack.type] == "textGetSize" then
+		x, y = term.getSize()
+		conn:send("textInfo", x..","..y)
+	elseif packet.types[pack.type] == "textScroll" and pack.payload then
+		term.scroll(tonumber(pack.payload))
+	elseif packet.types[pack.type] == "textIsColor" then
+		conn:send("textInfo", tostring(term.isColor()))
+	elseif packet.types[pack.type] == "textColor" and pack.payload then
+		pack.payload = tonumber(pack.payload)
+		if (pack.payload == 1 or pack.payload == 32768) or term.isColor() then
+			term.setTextColor(pack.payload)
+		end
+	elseif packet.types[pack.type] == "textBackground" and pack.payload then
+		pack.payload = tonumber(pack.payload)
+		if (pack.payload == 1 or pack.payload == 32768) or term.isColor() then
+			term.setBackgroundColor(pack.payload)
+		end
+	elseif pType == "textTable" then
+		local linesTable = textutils.unserialize(pack.payload)
+		for i=1, linesTable.sizeY do
+			term.setCursorPos(1,i)
+			local lineEnd = false
+			local offset = 1
+			while not lineEnd do
+				local textColorString = string.match(string.sub(linesTable.textColor[i], offset), string.sub(linesTable.textColor[i], offset, offset).."*")
+				local backColorString = string.match(string.sub(linesTable.backColor[i], offset), string.sub(linesTable.backColor[i], offset, offset).."*")
+				term.setTextColor(2 ^ tonumber(string.sub(textColorString, 1, 1), 16))
+				term.setBackgroundColor(2 ^ tonumber(string.sub(backColorString, 1, 1), 16))
+				term.write(string.sub(linesTable.text[i], offset, offset + math.min(#textColorString, #backColorString) - 1))
+				offset = offset + math.min(#textColorString, #backColorString)
+				if offset > linesTable.sizeX then lineEnd = true end
+			end
+		end
+		term.setCursorPos(linesTable.cursorX, linesTable.cursorY)
+		term.setCursorBlink(linesTable.cursorBlink)
+	end
+	return
+end
