@@ -83,16 +83,16 @@ function send(pack, ll)
 	if routeNum then
 		local route = net.routeTable[routeNum]
 		if route.cost > 0 then
-			return peripheral.call(modemSide, "transmit", route.gateway, os.computerID(), pack:encapsulate(ll))
+			return net.raw_send(route.gateway, pack:encapsulate(ll))
 		else
 			if net.routeTable[net.routeFromCID(pack.destination)].type == "T" then
 				coroutine.resume(daemonTable.netd, 0, "turtlepacket>"..pack.destination.." "..pack:tostring())
 			else
-				return peripheral.call(modemSide, "transmit", route.idNum, os.computerID(), pack:tostring())
+				return net.raw_send(route.idNum, pack:tostring())
 			end
 		end
 	elseif pack.type == "RM" then
-		return peripheral.call(modemSide, "transmit", pack.destination, os.computerID(), pack.payload)
+		return net.raw_send(pack.destination, pack.payload)
 	end
 	return false
 end
