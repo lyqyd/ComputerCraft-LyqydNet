@@ -4,7 +4,10 @@ os.loadAPI("connection")
 os.loadAPI("netfile")
 os.loadAPI("netscreen")
 
+--modread
+
 local oldPeriphCall = peripheral.call
+local oldPull = os.pullEvent
 
 peripheral.call = function(...)
 	if not shell then
@@ -69,6 +72,48 @@ end
 
 function rednet.broadcast(message)
 	return rednet.send(65535, message)
+end
+
+function os.pullEvent(filter)
+	while true do
+		local event = {oldPull()}
+		if event[1] == "modem_message" then
+			result = {net.message(event[3], event[5], event[6])}
+			if result then
+				if result[1] == "packet_inbound" then
+					if result[2].destination ~= os.computerID() then
+						coroutine.resume(net.daemonTable.netd, result[2])
+					else
+						if net.socketTable[result[2].toSock] then
+							if net.socketTable[result[2].toSock] == true
+								return "socket_message", result[2]
+							else
+								coroutine.resume(net.daemonTable[net.socketTable[result[2].toSock]], "socket_message", result[2])
+							end
+						end
+					end
+				else
+					if result[1] == true then
+						if modemState[event[2]] and (event[3] == os.computerID() or event[3] == 65535) then
+							if not filter or filter == "rednet_message" then
+								return "rednet_message", event[4], event[5], event[6]
+							end
+						end
+					elseif result then
+						if not filter or filter == result[1] then
+							return unpack(result)
+						end
+					end
+				end
+			end
+		elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
+			coroutine.resume(net.daemonTable.netd, packet.new("SI", 0, "timeout"))
+		else
+			if not filter or filter == event[1] then
+				return unpack(event)
+			end
+		end
+	end
 end
 
 --begin netd functionality
