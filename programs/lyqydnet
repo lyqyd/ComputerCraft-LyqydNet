@@ -1,6 +1,8 @@
 os.loadAPI("net")
+os.loadAPI("packet")
 os.loadAPI("connection")
 os.loadAPI("netfile")
+os.loadAPI("netscreen")
 
 local oldPeriphCall = peripheral.call
 
@@ -67,6 +69,48 @@ end
 
 function rednet.broadcast(message)
 	return rednet.send(65535, message)
+end
+
+--begin netd functionality
+
+local function readHosts()
+	if fs.exists("/etc/hosts") then
+		local file = io.open("/etc/hosts", "r" )
+		local line = file:read()
+		while line do
+			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTR]) "), string.match(line, ";[CTR] (%w+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"))
+			line = file:read()
+		end
+		file:close()
+	elseif not fs.isDir("/etc") then
+		fs.makeDir("/etc")
+	end
+end
+
+local function saveHosts()
+	local file = io.open("/etc/hosts", "w" )
+	if file then
+		for rNum, rInfo in ipairs(net.routeTable) do
+			if rInfo then
+				file:write(rInfo.idNum..":"..rInfo.gateway..","..rInfo.cost..";"..rInfo.type.." "..rInfo.name.."\n")
+			end
+		end
+		file:close()
+		return true
+	end
+	return false
+end
+
+local function saveForwardTable()
+	local file = io.open( "etc/packets", "w" )
+	if file then
+		for pNum, pContents in ipairs( forwardTable ) do
+			file:write( pContents.dest..">"..pContents.data.."\n" )
+		end
+		file:close()
+		return true
+	end
+	return false
 end
 
 local function processPacketHeader(packet)
@@ -212,6 +256,7 @@ function netDaemon()
 			end
 			if longlink then
 				table.insert(forwardTable, {dest = pack.destination, data = pack.encapsulate(longlink)})
+				saveForwardTable()
 			end
 			if net.routeTable[net.routeFromCID(pack.destination)].cost == 0 then
 				--endpoint confirmation
@@ -230,6 +275,7 @@ function netDaemon()
 					break
 				end
 			end
+			saveForwardTable()
 			for pNum, pContents in ipairs(endpointTable) do
 				if pContents.data == string.match(packet, "PS:4,4;(.*)") then
 					table.remove(endpointTable, pNum)
@@ -247,19 +293,7 @@ function netDaemon()
 		elseif pack.type == "SI" then
 			--instruction
 			local instruction = pack.payload
-			if instruction == "stop" then
-				saveHosts()
-				if routing and #forwardTable > 0 then
-					local file = io.open( "etc/packets", "w" )
-					if file then
-						for pNum, pContents in ipairs( forwardTable ) do
-							file:write( pContents.dest..">"..pContents.data.."\n" )
-						end
-						file:close()
-					end
-				end
-				netdExit = true
-			elseif instruction == "route" then
+			if instruction == "route" then
 				routing = true
 				if fs.exists( "etc/packets" ) then
 					local file = io.open( "etc/packets", "r" )
@@ -317,3 +351,5 @@ function netDaemon()
 end
 
 net.daemonAdd("netd", netDaemon, 4)
+
+net.netInit()
