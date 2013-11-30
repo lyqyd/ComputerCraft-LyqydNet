@@ -98,6 +98,14 @@ function new(destination, port, localport)
 		remote = destination,
 		state = "new",
 	}
+	local dType, dValue = string.match(destination, "^(%a):(.*)")
+	if dType == "i" then
+		instance.destination = dValue
+	elseif dType == "r" then
+		instance.destination = net.CIDFromRoute(dValue)
+	elseif destination then
+		instance.destination = net.CIDFromRoute(net.routeFromName(destionation))
+	end
 	--if a local port is specified, assume that the connection is already open.
 	if localport then instance.state = "open" end
 	setmetatable(instance, cmetatable)
