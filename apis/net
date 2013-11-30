@@ -160,11 +160,12 @@ function message(id, msg, dist)
 	local pack = packet.reconstruct(msg, os.computerID(), id, dist)
 	if not pack.type then
 		--does not match.
-		return id, msg, dist
+		return true
 	end
-	if pack.type == "PF" or pack.type == "PC" then
+	local header = string.sub(msg, 1, 2)
+	if header == "PF" or header == "PC" then
 		if pack.destination == os.computerID() then
-			if packetType == "PC" then rednet.send(id, "PS:4,4;".. msg) else rednet.send(id, "HK:4,4;"..msg) end
+			if header == "PC" then rednet.send(id, "PS:4,4;".. msg) else rednet.send(id, "HK:4,4;"..msg) end
 			os.queueEvent("modem_message", modemSide, pack.destination, pack.origin, pack:tostring(), false)
 			return false
 		else
@@ -176,7 +177,7 @@ function message(id, msg, dist)
 			return false
 		end
 	elseif pack.type == "RM" then
-		return "rednet_message", pack.payload
+		return "rednet_message", pack.payload, 0
 	else
 		return "packet_inbound", pack
 	end
