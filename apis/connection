@@ -64,12 +64,11 @@ local Connection = {
 				local pack = self:newPacket("SC", message or "disconnect")
 				net.send(pack)
 			end
+			--must explicitly compare to true so that a string value will not evaluate as also true.
+			if net.socketTable[self.localport] == true then net.socketTable[self.localport] = nil end
 			self.state = "closed"
 			return true
 		else return false end
-		--must explicitly compare to true so that a string value will not evaluate as also true.
-		--look into freeing socket.
-		--if net.socketTable[connectionTable[conn].localport] == true then net.socketTable[connectionTable[conn].localport] = nil end
 	end,
 	isTurtle = function(self)
 		if net.routeTable[self:route()].type == "T" then return true else return false end
