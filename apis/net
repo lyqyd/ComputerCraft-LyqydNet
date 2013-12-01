@@ -1,12 +1,12 @@
 routeTable = {}
 daemonTable = {}
 socketTable = {}
-networkDaemonWakeup = nil
+networkDaemonTimeout = nil
 local modemSide
 
 function netInit (_side)
 	--initialize network communications
-	if daemonTable["netd"] then
+	if net.daemonTable.netd then
 		local open = false
 		if not _side then
 			for n,side in pairs(rs.getSides()) do
@@ -23,7 +23,7 @@ function netInit (_side)
 			open = true
 		end
 		--keep in mind that netd must be an exception since packets coming to it do not always have route numbers yet.
-		if open then coroutine.resume(daemonTable["netd"], packet.new("SI", 0, "announce")) end
+		if open then coroutine.resume(net.daemonTable.netd, packet.new("SI", 0, "announce")) end
 	end
 	return false
 end
@@ -85,7 +85,7 @@ function send(pack, ll)
 		if route.cost > 0 then
 			return net.raw_send(route.gateway, pack:encapsulate(ll))
 		else
-			if net.routeTable[net.routeFromCID(pack.destination)].type == "T" then
+			if route.type == "T" then
 				coroutine.resume(daemonTable.netd, 0, "turtlepacket>"..pack.destination.." "..pack:tostring())
 			else
 				return net.raw_send(route.idNum, pack:tostring())
@@ -155,7 +155,6 @@ function remove_route (route)
 end
 
 function message(id, msg, dist)
-	local packetType, inSocket, foreignSocket, body
 	--pass the local computer ID as the destination, forwarded packets will automatically reassign the actual destination.
 	local pack = packet.reconstruct(msg, os.computerID(), id, dist)
 	if not pack.type then
@@ -172,8 +171,8 @@ function message(id, msg, dist)
 			return "packet_inbound", pack
 		end
 	elseif pack.type == "HA" or pack.type == "HT" or pack.type == "HI" then
-		if daemonTable.netd then
-			coroutine.resume(daemonTable.netd, pack)
+		if net.daemonTable.netd then
+			coroutine.resume(net.daemonTable.netd, pack)
 			return false
 		end
 	elseif pack.type == "RM" then
