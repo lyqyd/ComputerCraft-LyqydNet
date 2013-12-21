@@ -7,7 +7,7 @@ local function getPort()
 		if net.socketTable[portChoice] then
 			portChoice = portChoice + 1
 		else
-			net.socketTable[portChoice] = true
+			net.socketTable[portChoice] = coroutine.running()
 			validPort = true
 		end
 	end

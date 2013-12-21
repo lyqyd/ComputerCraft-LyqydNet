@@ -89,12 +89,14 @@ local pmetatable = {
 
 function new(packetType, destination, body, toSocket, fromSocket)
 	local instance = {
+		lyqydnet = true,
 		type = packetType,
 		payload = body,
 		destination = destination,
 		toSock = toSocket,
 		fromSock = fromSocket,
 		origin = os.computerID(),
+		confirm = false,
 		distance = 0,
 	}
 	setmetatable(instance, pmetatable)

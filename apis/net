@@ -23,7 +23,7 @@ function netInit (_side)
 			open = true
 		end
 		--keep in mind that netd must be an exception since packets coming to it do not always have route numbers yet.
-		if open then coroutine.resume(net.daemonTable.netd, packet.new("SI", 0, "announce")) end
+		if open then coroutine.resume(net.daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, "announce")) end
 	end
 	return false
 end
@@ -83,13 +83,13 @@ function send(pack, ll)
 	if routeNum then
 		local route = net.routeTable[routeNum]
 		if route.cost > 0 then
-			return net.raw_send(route.gateway, pack:encapsulate(ll))
+			if ll then pack.confirm = true end
+			return net.raw_send(route.gateway, pack)
 		else
 			if route.type == "T" then
-				coroutine.resume(daemonTable.netd, 0, "turtlepacket>"..pack.destination.." "..pack:tostring())
-			else
-				return net.raw_send(route.idNum, pack:tostring())
+				coroutine.resume(daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, {instruction = "turtlepacket", data = pack}))
 			end
+			return net.raw_send(route.idNum, pack)
 		end
 	elseif pack.type == "RM" then
 		return net.raw_send(pack.destination, pack.payload)
@@ -151,33 +151,5 @@ function remove_route (route)
 			file:close()
 		end
 		routeTable[route] = false
-	end
-end
-
-function message(id, msg, dist)
-	--pass the local computer ID as the destination, forwarded packets will automatically reassign the actual destination.
-	local pack = packet.reconstruct(msg, os.computerID(), id, dist)
-	if not pack.type then
-		--does not match.
-		return true
-	end
-	local header = string.sub(msg, 1, 2)
-	if header == "PF" or header == "PC" then
-		if pack.destination == os.computerID() then
-			if header == "PC" then rednet.send(id, "PS:4,4;".. msg) else rednet.send(id, "HK:4,4;"..msg) end
-			os.queueEvent("modem_message", modemSide, pack.destination, pack.origin, pack:tostring(), false)
-			return false
-		else
-			return "packet_inbound", pack
-		end
-	elseif pack.type == "HA" or pack.type == "HT" or pack.type == "HI" then
-		if net.daemonTable.netd then
-			coroutine.resume(net.daemonTable.netd, pack)
-			return false
-		end
-	elseif pack.type == "RM" then
-		return "rednet_message", pack.payload, 0
-	else
-		return "packet_inbound", pack
 	end
 end
