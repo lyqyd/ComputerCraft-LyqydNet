@@ -23,14 +23,14 @@ function netInit (_side)
 			open = true
 		end
 		--keep in mind that netd must be an exception since packets coming to it do not always have route numbers yet.
-		if open then coroutine.resume(net.daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, "announce")) end
+		if open then coroutine.resume(net.daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, "announce")) return true end
 	end
 	return false
 end
 
 function daemonAdd (dName, dFunction, socket)
-	if socket then socketTable[tonumber(socket)] = dName end
 	daemonTable[dName] = coroutine.create(dFunction)
+	if socket then socketTable[tonumber(socket)] = daemonTable[dName] end
 	coroutine.resume(daemonTable[dName], 0, "SI", "start")
 end
 
@@ -84,15 +84,18 @@ function send(pack, ll)
 		local route = net.routeTable[routeNum]
 		if route.cost > 0 then
 			if ll then pack.confirm = true end
-			return net.raw_send(route.gateway, pack)
+			net.raw_send(route.gateway, pack)
+			return true
 		else
 			if route.type == "T" then
 				coroutine.resume(daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, {instruction = "turtlepacket", data = pack}))
 			end
-			return net.raw_send(route.idNum, pack)
+			net.raw_send(route.idNum, pack)
+			return true
 		end
 	elseif pack.type == "RM" then
-		return net.raw_send(pack.destination, pack.payload)
+		net.raw_send(pack.destination, pack.payload)
+		return true
 	end
 	return false
 end
@@ -105,16 +108,8 @@ function add_route (idNumber, compType, compName, gateway, cost)
 	idNumber = tonumber(idNumber)
 	compType = tostring(compType)
 	compName = tostring(compName)
-	if gateway then
-		gateway = tonumber(gateway)
-	else
-		gateway = 0
-	end
-	if cost then
-		cost = tonumber(cost)
-	else
-		cost = 0
-	end
+	gateway = tonumber(gateway) or 0
+	cost = tonumber(cost) or 0
 	for rNum,rInfo in ipairs(routeTable) do
 		if rInfo then
 			if idNumber == rInfo.idNum then
