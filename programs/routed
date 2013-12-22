@@ -2,6 +2,6 @@ if turtle then
 	return false
 else
 	if net.daemonTable.netd then
-		coroutine.resume(net.daemonTable.netd, packet.new("SI", 0, "route"))
+		coroutine.resume(net.daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, "route"))
 	end
 end
