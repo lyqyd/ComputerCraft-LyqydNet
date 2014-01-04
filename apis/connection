@@ -22,11 +22,13 @@ local Connection = {
 		if self.state ~= "open" then
 			self.localport = getPort()
 			net.send(self:newPacket("SQ", "connect"))
+			self.state = "open_wait"
 			local response = self:listen(timeout)
-			if response.pType == "SR" then
+			if response and response.pType == "SR" then
 				self.state = "open"
 				return response.payload
 			else
+				self.state = "closed"
 				return false
 			end
 		end
@@ -42,12 +44,12 @@ local Connection = {
 		else return false end
 	end,
 	listen = function(self, timeout)
-		if self.state == "open" then
+		if self.state == "open" or self.state == "open_wait" then
 			local timer
 			if timeout then timer = os.startTimer(timeout) end
 			while true do
 				local event = {os.pullEvent()}
-				if event[1] == "socket_message" then
+				if event[1] == "lyqydnet_message" then
 					--be really sure the packet is intended for us.
 					if event[2].toSock == self.localport and event[2].fromSock == self.remoteport and event[2].origin == self.remote and event[2].destination == os.computerID() then
 						return event[2]
@@ -128,7 +130,7 @@ function listen(port, timeout)
 	if timeout then timer = os.startTimer(timeout) end
 	while true do
 		local event = {os.pullEvent()}
-		if event[1] == "socket_message" then
+		if event[1] == "lyqydnet_message" then
 			if event[2].toSock == port and event[2].destination == os.computerID() then
 				local found, conn = connection.find(event[2])
 				if found then
