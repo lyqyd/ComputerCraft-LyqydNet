@@ -72,9 +72,13 @@ types = {
 local Packet = {
 	tostring = function(self)
 		if self.type == "RM" then
-			return self.type..":"..self.payload
+			return self.type..":"..tostring(self.payload)
 		else
-			return self.type..":"..self.toSock..","..self.fromSock..";"..self.payload
+			if self.toSock and self.fromSock then
+				return self.type..":"..self.toSock..","..self.fromSock..";"..tostring(self.payload)
+			else
+				return self.type..":"..tostring(self.payload)
+			end
 		end
 	end,
 	enacapsulate = function(self, longlink)
