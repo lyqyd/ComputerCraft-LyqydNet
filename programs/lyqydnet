@@ -95,8 +95,6 @@ local function processModemMessage(event, filter)
 				else
 					coroutine.resume(net.socketTable[event[5].toSock], "lyqydnet_packet", event[5])
 				end
-			else
-
 			end
 		end
 	else
@@ -115,7 +113,10 @@ if not process then
 		while true do
 			local event = {oldPullRaw()}
 			if event[1] == "modem_message" then
-				return processModemMessage(event, filter)
+				local retVal = {processModemMessage(event, filter)}
+				if #retVal > 0 then
+					return unpack(retVal)
+				end
 			elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
 				coroutine.resume(net.daemonTable.netd, unpack(event))
 			else
