@@ -97,16 +97,15 @@ function new(destination, port, localport)
 		--get a local port when opening the connection unless specified.
 		localport = localport,
 		remoteport = port,
-		remote = destination,
 		state = "new",
 	}
 	local dType, dValue = string.match(destination, "^(%a):(.*)")
 	if dType == "i" then
-		instance.destination = dValue
+		instance.remote = dValue
 	elseif dType == "r" then
-		instance.destination = net.CIDFromRoute(dValue)
+		instance.remote = net.CIDFromRoute(dValue)
 	elseif destination then
-		instance.destination = net.CIDFromRoute(net.routeFromName(destination))
+		instance.remote = net.CIDFromRoute(net.routeFromName(destination))
 	end
 	--if a local port is specified, assume that the connection is already open.
 	if localport then instance.state = "open" end
