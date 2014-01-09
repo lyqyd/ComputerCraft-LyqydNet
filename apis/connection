@@ -126,6 +126,15 @@ function find(pack)
 end
 
 function listen(port, timeout)
+	local revert
+	if net.socketTable[port] and net.socketTable[port] ~= coroutine.running() then
+		return nil, "Cannot listen on socket"
+	elseif net.socketTable[port] and net.socketTable[port] == coroutine.running() then
+		revert = false
+	else
+		revert = true
+		net.socketTable[port] = coroutine.running()
+	end
 	local timer
 	if timeout then timer = os.startTimer(timeout) end
 	while true do
@@ -134,12 +143,15 @@ function listen(port, timeout)
 			if event[2].toSock == port and event[2].destination == os.computerID() then
 				local found, conn = connection.find(event[2])
 				if found then
+					if revert then net.socketTable[port] = nil end
 					return event[2], conn
 				else
+					if revert then net.socketTable[port] = nil end
 					return event[2], connection.new(event[2].origin, event[2].fromSock, event[2].toSock)
 				end
 			end
 		elseif event[1] == "timer" and timeout and event[2] == timer then
+			if revert then net.socketTable[port] = nil end
 			return false
 		end
 	end
