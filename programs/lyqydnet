@@ -435,10 +435,11 @@ function netDaemon()
 end
 
 net.daemonAdd("netd", netDaemon, 4)
+net.netInit()
 
 if process and process.id() then
 	--if run in lyqydos, set up correct processes.
-	process.new(netDaemon, "lyqydnet")
+	process.new(netDaemon, "netd")
 
 	local function pidFromThread(thread)
 		for pNum, pInfo in pairs(process.list) do
@@ -458,7 +459,7 @@ if process and process.id() then
 						end
 					end
 				elseif event[5].destination ~= os.computerID() or event[5].type == "HA" or event[5].type == "HT" or event[5].type == "HI" then
-					process.getFromName("lyqydnet"):queue("lyqydnet_packet", event[5])
+					process.getFromName("netd"):queue("lyqydnet_packet", event[5])
 				else
 					if net.socketTable[event[5].toSock] then
 						process.list[pidFromThread(net.socketTable[event[5].toSock])]:queue("lyqydnet_packet", event[5])
