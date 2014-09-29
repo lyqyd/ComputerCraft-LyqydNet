@@ -108,7 +108,7 @@ function add_route (idNumber, compType, compName, gateway, cost)
 	idNumber = tonumber(idNumber)
 	compType = tostring(compType)
 	compName = tostring(compName)
-	gateway = tonumber(gateway) or 0
+	gateway = tonumber(gateway) or -1
 	cost = tonumber(cost) or 0
 	for rNum,rInfo in ipairs(routeTable) do
 		if rInfo then

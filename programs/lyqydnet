@@ -1,3 +1,5 @@
+local args = {...}
+
 os.loadAPI("net")
 os.loadAPI("packet")
 os.loadAPI("connection")
@@ -135,6 +137,15 @@ local forwardTable = {}
 local endpointTable = {}
 local infoWaitTable = {}
 
+if #args >= 1 then
+	if args[1] == "route" then
+		routing = true
+		if args[2] and args[2] == "longlink" then
+			longlink = true
+		end
+	end
+end
+
 local function readHosts()
 	if fs.exists("/etc/hosts") then
 		local file = io.open("/etc/hosts", "r" )
@@ -213,12 +224,9 @@ local function createHostTable(exclude)
 			table.insert(hostTable, infoTable)
 		end
 	end
-	table.insert(hostTable, {id = os.computerID(), gateway = 0, cost = 0, type = "R", label = os.getComputerLabel()})
+	table.insert(hostTable, {id = os.computerID(), gateway = -1, cost = 0, type = "R", label = os.getComputerLabel()})
 	return hostTable
 end
-
-local routing = false
-local longlink = false
 
 function netDaemon()
 	readHosts()
@@ -228,7 +236,7 @@ function netDaemon()
 			local pack = event[2]
 			print(pack.type)
 			if pack.type == "HA" then
-				local newRoute = net.add_route(pack.origin, pack.payload.type, pack.payload.label, 0, 0)
+				local newRoute = net.add_route(pack.origin, pack.payload.type, pack.payload.label, -1, 0)
 				saveHosts()
 				if routing then 
 					net.send(packet.new("HT", pack.origin, createHostTable(newRoute), 4, 4))
@@ -453,7 +461,7 @@ if process and process.id() then
 				if event[5].type == "RM" then
 					--copied from lrnd
 					for pNum, pInfo in pairs(process.processTable) do
-						if pInfo.rednet[event[2]] then
+						if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
 							process.queueEvent(pNum, "rednet_message", event[5].origin, event[5].payload, 0)
 						end
 					end
@@ -466,7 +474,7 @@ if process and process.id() then
 				end
 			else
 				for pNum, pInfo in pairs(process.processTable) do
-					if pInfo.rednet[event[2]] then
+					if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
 						process.queueEvent(pNum, "rednet_message", event[4], event[5], event[6])
 					end
 				end
@@ -476,3 +484,5 @@ if process and process.id() then
 		end
 	end
 end
+
+net.netInit()
