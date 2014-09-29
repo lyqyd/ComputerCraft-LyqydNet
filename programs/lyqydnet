@@ -443,13 +443,14 @@ function netDaemon()
 end
 
 net.daemonAdd("netd", netDaemon, 4)
+net.netInit()
 
 if process and process.id() then
 	--if run in lyqydos, set up correct processes.
-	process.add(netDaemon, "netd")
+	process.new(netDaemon, "netd")
 
 	local function pidFromThread(thread)
-		for pNum, pInfo in pairs(process.processTable) do
+		for pNum, pInfo in pairs(process.list) do
 			if pInfo.thread == thread then return pNum end
 		end
 	end
@@ -460,22 +461,22 @@ if process and process.id() then
 			if type(event[5]) == "table" and event[5].lyqydnet then
 				if event[5].type == "RM" then
 					--copied from lrnd
-					for pNum, pInfo in pairs(process.processTable) do
+					for pNum, pInfo in pairs(process.list) do
 						if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
-							process.queueEvent(pNum, "rednet_message", event[5].origin, event[5].payload, 0)
+							pInfo:queue("rednet_message", event[5].origin, event[5].payload, 0)
 						end
 					end
 				elseif event[5].destination ~= os.computerID() or event[5].type == "HA" or event[5].type == "HT" or event[5].type == "HI" then
-					process.queueEvent(process.getIDFromName("netd"), "lyqydnet_packet", event[5])
+					process.getFromName("netd"):queue("lyqydnet_packet", event[5])
 				else
 					if net.socketTable[event[5].toSock] then
-						process.queueEvent(pidFromThread(net.socketTable[event[5].toSock]), "lyqydnet_packet", event[5])
+						process.list[pidFromThread(net.socketTable[event[5].toSock])]:queue("lyqydnet_packet", event[5])
 					end
 				end
 			else
-				for pNum, pInfo in pairs(process.processTable) do
+				for pNum, pInfo in pairs(process.list) do
 					if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
-						process.queueEvent(pNum, "rednet_message", event[4], event[5], event[6])
+						pInfo:queue("rednet_message", event[4], event[5], event[6])
 					end
 				end
 			end
