@@ -3,11 +3,16 @@ connectionTable = {}
 local function getPort()
 	local validPort = false
 	local portChoice = 51
+	local portsInUse = {}
+	for k, v in pairs(connection.connectionTable) do
+		if v and v.localport then
+			portsInUse[v.localport] = true
+		end
+	end
 	while not validPort do
-		if net.socketTable[portChoice] then
+		if portsInUse[portChoice] then
 			portChoice = portChoice + 1
 		else
-			net.socketTable[portChoice] = coroutine.running()
 			validPort = true
 		end
 	end
@@ -18,13 +23,14 @@ local Connection = {
 	newPacket = function(self, pType, message)
 		return packet.new(pType, self.remote, message, self.remoteport, self.localport)
 	end,
-	open = function(self, timeout)
+	open = function(self, timeout, _message)
 		if self.state ~= "open" then
+			message = _message or "connect"
 			self.localport = getPort()
-			net.send(self:newPacket("SQ", "connect"))
+			net.send(self:newPacket("SQ", message))
 			self.state = "open_wait"
 			local response = self:listen(timeout)
-			if response and response.pType == "SR" then
+			if response and response.type == "SR" then
 				self.state = "open"
 				return response.payload
 			else
@@ -45,6 +51,15 @@ local Connection = {
 	end,
 	listen = function(self, timeout)
 		if self.state == "open" or self.state == "open_wait" then
+			local revert
+			if net.socketTable[self.localport] and net.socketTable[self.localport] ~= coroutine.running() then
+				return nil, "Cannot listen on socket"
+			elseif net.socketTable[self.localport] and net.socketTable[self.localport] == coroutine.running() then
+				revert = false
+			else
+				revert = true
+				net.socketTable[self.localport] = coroutine.running()
+			end
 			local timer
 			if timeout then timer = os.startTimer(timeout) end
 			while true do
@@ -52,9 +67,11 @@ local Connection = {
 				if event[1] == "lyqydnet_packet" then
 					--be really sure the packet is intended for us.
 					if event[2].toSock == self.localport and event[2].fromSock == self.remoteport and event[2].origin == self.remote and event[2].destination == os.computerID() then
+						if revert then net.socketTable[self.localport] = nil end
 						return event[2]
 					end
 				elseif event[1] == "timer" and timeout and event[2] == timer then
+					if revert then net.socketTable[self.localport] = nil end
 					return false
 				end
 			end
