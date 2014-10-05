@@ -89,11 +89,11 @@ local function processModemMessage(event, filter)
 		if event[5].destination ~= os.computerID() then
 			coroutine.resume(net.daemonTable.netd, "lyqydnet_packet", event[5])
 		elseif event[5].type == "RM" and (not filter or filter == "rednet_message") then
-			return "rednet_message", event[5].origin, event[5].payload, 0
+			os.queueEvent("rednet_message", event[5].origin, event[5].payload, 0)
 		else
 			if event[5].toSock and net.socketTable[event[5].toSock] then
 				if net.socketTable[event[5].toSock] == coroutine.running() and (not filter or filter == "lyqydnet_packet") then
-					return "lyqydnet_packet", event[5]
+					os.queueEvent("lyqydnet_packet", event[5])
 				else
 					coroutine.resume(net.socketTable[event[5].toSock], "lyqydnet_packet", event[5])
 				end
@@ -102,30 +102,33 @@ local function processModemMessage(event, filter)
 	else
 		if modemState[event[2]] and (event[3] == os.computerID() or event[3] == 65535) then
 			if not filter or filter == "rednet_message" then
-				return "rednet_message", event[4], event[5], event[6]
+				os.queueEvent("rednet_message", event[4], event[5], event[6])
 			end
-		elseif not filter or filter == "modem_message" then
-			return unpack(event)
 		end
 	end
 end
 
 if not process then
-	function os.pullEventRaw(filter)
-		while true do
-			local event = {oldPullRaw()}
-			if event[1] == "modem_message" then
-				local retVal = {processModemMessage(event, filter)}
-				if #retVal > 0 then
-					return unpack(retVal)
-				end
-			elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
-				coroutine.resume(net.daemonTable.netd, unpack(event))
-			else
-				if not filter or filter == event[1] then
-					return unpack(event)
+	function _G.os.pullEventRaw(filter)
+		if getfenv(2).CHANNEL_REPEAT and getfenv(2).CHANNEL_BROADCAST then
+			--in rednet coroutine, theoretically, so should run only once per event.
+			while true do
+				local event = {oldPullRaw()}
+				if event[1] == "modem_message" then
+					processModemMessage(event, filter)
+					if not filter or filter == event[1] then
+						return unpack(event)
+					end
+				elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
+					coroutine.resume(net.daemonTable.netd, unpack(event))
+				else
+					if not filter or filter == event[1] then
+						return unpack(event)
+					end
 				end
 			end
+		else
+			return oldPullRaw(filter)
 		end
 	end
 end
