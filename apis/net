@@ -97,7 +97,7 @@ function send(pack, ll)
 		net.raw_send(pack.destination, pack.payload)
 		return true
 	end
-	return false
+	return false, "could not send packet"
 end
 
 function raw_send (id, message)

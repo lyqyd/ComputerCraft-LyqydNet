@@ -36,12 +36,12 @@ local Connection = {
 	send = function(self, pType, message)
 		if self.state == "open" then
 			local packetType = pType
-			if pType:len() > 2 then
-				if packet.types[pType] then packetType = packet.types[pType] else return false end
+			if #pType > 2 then
+				if packet.types[pType] then packetType = packet.types[pType] else return false, "invalid packet type" end
 			end
 			local pack = self:newPacket(packetType, message)
 			return net.send(pack)
-		else return false end
+		else return false, "connection not open" end
 	end,
 	listen = function(self, timeout)
 		if self.state == "open" or self.state == "open_wait" then
@@ -85,6 +85,7 @@ local Connection = {
 		for cNum, cInfo in pairs(connection.connectionTable) do
 			if cInfo == self then
 				table.remove(connection.connectionTable, cNum)
+				break
 			end
 		end
 	end,
@@ -101,7 +102,7 @@ function new(destination, port, localport)
 	}
 	local dType, dValue = string.match(destination, "^(%a):(.*)")
 	if dType == "i" then
-		instance.remote = dValue
+		instance.remote = tonumber(dValue)
 	elseif dType == "r" then
 		instance.remote = net.CIDFromRoute(dValue)
 	elseif destination then
@@ -116,7 +117,7 @@ end
 
 --searches for a connection matching inbound packet details.
 function find(pack)
-	for cNum, cInfo in pairs(connection.connectionTable) do
+	for cNum, cInfo in ipairs(connection.connectionTable) do
 		if cInfo.remote == pack.origin and cInfo.remoteport == pack.fromSock and cInfo.localport == pack.toSock then
 			return cNum, cInfo
 		end

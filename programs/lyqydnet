@@ -234,7 +234,6 @@ function netDaemon()
 		local event = {coroutine.yield()}
 		if event[1] == "lyqydnet_packet" then
 			local pack = event[2]
-			print(pack.type)
 			if pack.type == "HA" then
 				local newRoute = net.add_route(pack.origin, pack.payload.type, pack.payload.label, -1, 0)
 				saveHosts()
@@ -443,7 +442,6 @@ function netDaemon()
 end
 
 net.daemonAdd("netd", netDaemon, 4)
-net.netInit()
 
 if process and process.id() then
 	--if run in lyqydos, set up correct processes.

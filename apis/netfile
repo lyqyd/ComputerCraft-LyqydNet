@@ -4,7 +4,7 @@ function get (conn, remoteFile, localFile, timeout)
 end
 
 function send (conn, localFile)
-	--have already gotten an FQ, need to just send the file now.
+	--have already gotten an FR/FQ, need to just send the file now.
 	if fs.exists(localFile) then
 		if not conn:send("fileHeader", localFile) then return false end
 		local file = io.open( localFile, "r" )
@@ -30,7 +30,7 @@ function put (conn, localFile, remoteFile, timeout)
 end
 
 function receive (conn, lFile, timeout)
-	--already got an FS and replied, just catch the file header and data now.
+	--already got an FS and replied or sent an FQ, just catch the file header and data now.
 	if not connection.connectionTable[conn] then return false end
 	local header = nil
 	local fileData = nil
