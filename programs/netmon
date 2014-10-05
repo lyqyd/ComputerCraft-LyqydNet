@@ -1,43 +1,25 @@
-tArgs = {...}
+local args = {...}
 
-local oldRM, oldPS
+if #args < 2 then print("Specify start and stop IDs!") end
 
-function intercept(p1, p2, p3)
-	write(p1)
-	write(": ")
-	write(p2)
-	write(" @ ")
-	print(p3)
-	return oldRM(p1, p2, p3)
-end
+local modem
 
-function printOut(p1, p2)
-	print("-->"..p1..": "..p2)
-	return oldPS(p1, p2)
-end
-
-
-if #tArgs == 1 then
-	if tArgs[1] == "start" then
-		oldRM = net.message
-		oldPS = rednet.send
-		rawset(net, "message", intercept)
-		rawset(rednet, "send", printOut)
-		return true
-	elseif tArgs[1] == "stop" then
-		rawset(net, "message", oldRM)
-		rawset(rednet, "send", oldPS)
-		return true
-	else
-		print("Usage: netmon [start|stop]")
-		return false
+for _, side in pairs(rs.getSides()) do
+	if peripheral.getType(side) == "modem" then
+		modem = peripheral.wrap(side)
+		break
 	end
 end
 
+if not modem then return end
+
+for i = tonumber(args[1]), tonumber(args[2]) do
+	modem.open(i)
+end
+
 while true do
-	local event, p1, p2, p3 = os.pullEvent()
-	if event == "rednet_message" then
-		print(p1..": "..p2.." @ "..p3)
-		net.rednet_message(p1, p2, p3)
+	local event = {os.pullEvent()}
+	if event[1] == "modem_message" then
+		print(event[4]..": "..(type(event[5]) == "table" and textutils.serialize(event[5]) or tostring(event[5])))
 	end
 end
