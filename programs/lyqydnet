@@ -67,10 +67,16 @@ if not process then
 	end
 end
 
-function rednet.send(recipient, message)
+function rednet.send(recipient, message, protocol)
 	for _, side in pairs(rs.getSides()) do
-		if rednet.isOpen(side) then
-			net.send(packet.new("RM", recipient, message))
+		if peripheral.getType(side) == "modem" and rednet.isOpen(side) then
+			if term.current then
+				local pack = packet.new("RM", recipient, message)
+				pack.protocol = protocol
+				net.send(pack)
+			else
+				net.send(packet.new("RM", recipient, message))
+			end
 			return
 		end
 	end
@@ -89,7 +95,11 @@ local function processModemMessage(event, filter)
 		if event[5].destination ~= os.computerID() then
 			coroutine.resume(net.daemonTable.netd, "lyqydnet_packet", event[5])
 		elseif event[5].type == "RM" and (not filter or filter == "rednet_message") then
-			os.queueEvent("rednet_message", event[5].origin, event[5].payload, 0)
+			if term.current then
+				os.queueEvent("rednet_message", event[5].origin, event[5].payload, event[5].protocol)
+			else
+				os.queueEvent("rednet_message", event[5].origin, event[5].payload, 0)
+			end
 		else
 			if event[5].toSock and net.socketTable[event[5].toSock] then
 				if net.socketTable[event[5].toSock] == coroutine.running() and (not filter or filter == "lyqydnet_packet") then
@@ -102,7 +112,11 @@ local function processModemMessage(event, filter)
 	else
 		if modemState[event[2]] and (event[3] == os.computerID() or event[3] == 65535) then
 			if not filter or filter == "rednet_message" then
-				os.queueEvent("rednet_message", event[4], event[5], event[6])
+				if term.current then
+					os.queueEvent("rednet_message", event[4], event[5].message, event[5].sProtocol)
+				else
+					os.queueEvent("rednet_message", event[4], event[5], event[6])
+				end
 			end
 		end
 	end
@@ -470,7 +484,11 @@ if process and process.id() then
 			if event[3] == os.getComputerID() or event[3] == RN_BROADCAST and (type(event[5]) ~= "table" or not event[5].lyqydnet or event[5].type ~= "RM") then
 				for pNum, pInfo in pairs(process.list) do
 					if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
-						pInfo:queue("rednet_message", event[4], event[5], event[6])
+						if term.current then
+							pInfo:queue("rednet_message", event[4], event[5].message, event[5].sProtocol)
+						else
+							pInfo:queue("rednet_message", event[4], event[5], event[6])
+						end
 					end
 				end
 			end
@@ -479,7 +497,11 @@ if process and process.id() then
 					--copied from lrnd
 					for pNum, pInfo in pairs(process.list) do
 						if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
-							pInfo:queue("rednet_message", event[5].origin, event[5].payload, 0)
+							if term.current then
+								pInfo:queue("rednet_message", event[5].origin, event[5].payload, event[5].protocol)
+							else
+								pInfo:queue("rednet_message", event[5].origin, event[5].payload, 0)
+							end
 						end
 					end
 				elseif event[5].destination ~= os.computerID() or event[5].type == "HA" or event[5].type == "HT" or event[5].type == "HI" then
