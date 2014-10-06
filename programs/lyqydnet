@@ -165,7 +165,7 @@ local function readHosts()
 		local file = io.open("/etc/hosts", "r" )
 		local line = file:read()
 		while line do
-			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTR]) "), string.match(line, ";[CTR] (%w+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"))
+			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTR]) "), string.match(line, ";[CTR] ([^\n]+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"))
 			line = file:read()
 		end
 		file:close()
