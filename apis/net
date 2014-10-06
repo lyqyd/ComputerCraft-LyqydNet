@@ -94,14 +94,26 @@ function send(pack, ll)
 			return true
 		end
 	elseif pack.type == "RM" then
-		net.raw_send(pack.destination, pack.payload)
+		if term.current then
+			local id = math.random(1, 2147483547)
+			local messTable = {
+				nMessageID = id,
+				nRecipient = pack.destination,
+				message = pack.payload,
+				sProtocol = pack.protocol,
+			}
+			net.raw_send(pack.destination, messTable)
+			net.raw_send(65533, messTable)
+		else
+			net.raw_send(pack.destination, pack.payload)
+		end
 		return true
 	end
 	return false, "could not send packet"
 end
 
-function raw_send (id, message)
-	return peripheral.call(modemSide, "transmit", id, os.computerID(), message)
+function raw_send (recipient, message)
+	peripheral.call(modemSide, "transmit", recipient, os.computerID(), message)
 end
 
 function add_route (idNumber, compType, compName, gateway, cost)
