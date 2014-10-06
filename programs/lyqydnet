@@ -130,9 +130,6 @@ if not process then
 				local event = {oldPullRaw()}
 				if event[1] == "modem_message" then
 					processModemMessage(event, filter)
-					if not filter or filter == event[1] then
-						return unpack(event)
-					end
 				elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
 					coroutine.resume(net.daemonTable.netd, unpack(event))
 				else
