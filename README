@@ -9,10 +9,11 @@ to its startup (see 3.1 - 3.4 for more information):
 
 shell.run("lyqydnet")
 
-Routers need an additional line:
+Routers need an additional argument:
 
-shell.run("lyqydnet")
-shell.run("routed")
+shell.run("lyqydnet route")
+
+Use of the "routed" program to activate routing features is deprecated.
 
 2 - APIs
 
@@ -57,6 +58,12 @@ type. Note that if you have not opened the connection (see 2.1.2), send
 will take no action and return false. For example,
 
 conn:send("data", "Hello, Server!")
+
+Please be aware that if you specify an unrecognized packet type string,
+the packet may fail to be sent.  If you desire to use a custom packet
+type, you should either add your translation entries to the table in the
+packet API, or use the short (two character) packet type name here. See
+2.2.3 for more details.
 
 2.1.4 - conn:listen()
 
@@ -151,11 +158,11 @@ intended for use only by other APIs.
 2.3.1 - net.netInit()
 
 This function takes no arguments. The netInit function is crucial to the
-LyqydNet system. It must be called in startup on every computer that
-will be on the network. This makes it discoverable to routers and other
-computers on the network. Each computer must be labeled before it can be
-added to the network. Computer labels are used as hostnames. This
-function sends out basic information about the computer in a broadcast.
+LyqydNet system. It makes it discoverable to routers and other computers
+on the network. Each computer must be labeled before it can be added to
+the network. Computer labels are used as hostnames. This function sends
+out basic information about the computer in a broadcast. This function
+is automatically called when the lyqydnet program is run.
 
 2.3.2 - net.daemonAdd()
 
@@ -196,48 +203,16 @@ the computer associated with it.
 
 This function takes a packet and stringifies it and sends it out.
 
-2.3.9 - net.packet_receive()
-
-This function takes an ID number and a raw packet and returns a route
-number, a packet type, and the packet data. Use one of the listening
-functions in the connection API instead (2.1.4, 2.1.9)
-
-2.3.10 - net.add_route()
+2.3.9 - net.add_route()
 
 This function takes an ID number, computer type, computer name, gateway
 and cost and adds a route to the route table. Do not manually call this
 function.
 
-2.3.11 - net.remove_route()
+2.3.10 - net.remove_route()
 
 This function takes a route number and removes it from the routing table
 and the hosts file. Do not manually call this function.
-
-
-2.3.12 - net.rednet_message()
-
-A direct handler for the rednet_message event.  This function is passed
-the id, packet, and distance given by the rednet_message event from
-os.pullEvent(). Forwarded packets are automatically processed (unwrapped
-from encapsulation if they have reached the destination, otherwise sent
-to routed (the routing daemon) if it is running), packets with network
-information are sent to either the routing daemon or the network daemon.
-Packets intended for servers are checked against the list of running
-background servers. All other packets are simply returned in route
-number, packet type, packet data format.
-
-This function is how packets get to individual programs correctly. A
-computer could theoretically be running many servers, and as long as all
-of them were written properly, there would be no problems with packets
-being misdelivered. Background servers should NEVER wait for packets
-any other way than coroutine.yield(). They must use their own variables
-to remember any state information they need to keep track of, so they
-do not interfere with other background servers.
-
-Foreground servers will receive packets being returned by rednet_message
-whether they are intended for the server or not (except, of course, for
-any packets sent to a running background server), so the connection API
-is used to filter out those wayward packets.
 
 2.4 - Net File API
 
@@ -299,14 +274,14 @@ information packets.
 
 shell.run("lyqydnet")
 
-3.2 - routed
+3.1.1 - lyqydnet route
 
-This program enables the routing functionality of the network daemon. It
-maintains lists of hosts and is the backbone of the network. Each router
-will forward packets onto other routers, using the most efficient known
-route to pass packets on to their destinations. Routers are used to
-create networks larger than the maximum rednet transmission distance by
-repeating packets onward.
+This argument enables the routing functionality of the network daemon.
+It maintains lists of hosts and is the backbone of the network. Each
+router will forward packets onto other routers, using the most efficient
+known route to pass packets on to their destinations. Routers are used
+to create networks larger than the maximum rednet transmission distance
+by repeating packets onward.
 
 They send the list of hosts on the network to computers joining the
 network. New hosts will then direct all of their traffic through the
@@ -330,22 +305,18 @@ each other should not be longlink routers.
 The routing daemon should be started immediately after the network
 daemon, if the computer will be a router.
 
-shell.run("routed")
+shell.run("lyqydnet route")
 
-To make a router a longlink, router, send it an instruction:
+To make a router a longlink router, start it with the longlink option:
 
-coroutine.resume(net.daemonTable.netd, packet.new("SI", 0, "longlink"))
+shell.run("lyqydnet route longlink")
 
 3.3 - netmon
 
-Netmon is a network monitoring utility. It is relatively unpolished and
-can easily temporarily break a computer if used incorrectly. It will
-sometimes interfere with proper packet processing. Try running:
+Netmon is a network monitoring utility. It watches network activity over
+a range of frequencies specified when starting it:
 
-netmon start
-
-on a router that handles a lot of traffic. You'll get to see your
-network humming along!
+netmon 0 7
 
 4 - Examples
 
