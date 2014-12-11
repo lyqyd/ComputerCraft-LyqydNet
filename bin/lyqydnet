@@ -121,6 +121,9 @@ local function processModemMessage(event, filter)
 					os.queueEvent("rednet_message", event[4], event[5], event[6])
 				end
 			end
+		elseif event[3] == 65533 then
+			--assume we have opened it for a reason and pass along to netd.
+			coroutine.resume(net.daemonTable.netd, "rednet_repeat", event[5])
 		end
 	end
 end
@@ -155,6 +158,7 @@ local endpointTable = {}
 local infoWaitTable = {}
 --used for forwarding RM packets, if term.current then store the ID so as to not repeat them.
 local forwardedPacketIDs = {}
+local forwardedPacketTimers = {}
 
 if #args >= 1 then
 	if args[1] == "route" then
@@ -433,27 +437,41 @@ function netDaemon()
 					net.networkDaemonTimeout = os.startTimer(2)
 				end
 			end
-		elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
-			for hNum, hContents in ipairs(infoWaitTable) do
-				for rNum, rInfo in ipairs(net.routeTable) do
-					if rInfo and rInfo.type ~= "R" then
-						net.send(packet.new("HR", rInfo.idNum, hContents.dest, 4, 4))
-					end
+		elseif event[1] == "rednet_repeat" then
+			if not forwardedPacketIDs[event[2].nMessageID] then
+				forwardedPacketIDs[event[2].nMessageID] = true
+				forwardedPacketTimers[os.startTimer(30)] = event[2].nMessageID
+				for side in pairs(net.modems) do
+					net.raw_send(side, event[2].nRecipient, event[2])
+					net.raw_send(side, 65533, event[2])
 				end
 			end
-			infoWaitTable = {}
-			for pNum, pContents in ipairs(endpointTable) do
-				for rNum, rInfo in ipairs(net.routeTable) do
-					if rInfo and rInfo.type == "R" then
-						net.send(packet.new("HQ", rInfo.idNum, {id = pContents.dest}, 4, 4))
+		elseif event[1] == "timer" then
+			if event[2] == net.networkDaemonTimeout then
+				for hNum, hContents in ipairs(infoWaitTable) do
+					for rNum, rInfo in ipairs(net.routeTable) do
+						if rInfo and rInfo.type ~= "R" then
+							net.send(packet.new("HR", rInfo.idNum, hContents.dest, 4, 4))
+						end
 					end
 				end
-				net.send(packet.new("HQ", pContents.dest, {id = pContents.dest}, 4, 4))
-				net.remove_route(net.routeFromCID(pContents.dest))
-				table.insert(infoWaitTable, {dest = pContents.dest, data = pContents.data})
-				net.networkDaemonTimeout = os.startTimer(2)
+				infoWaitTable = {}
+				for pNum, pContents in ipairs(endpointTable) do
+					for rNum, rInfo in ipairs(net.routeTable) do
+						if rInfo and rInfo.type == "R" then
+							net.send(packet.new("HQ", rInfo.idNum, {id = pContents.dest}, 4, 4))
+						end
+					end
+					net.send(packet.new("HQ", pContents.dest, {id = pContents.dest}, 4, 4))
+					net.remove_route(net.routeFromCID(pContents.dest))
+					table.insert(infoWaitTable, {dest = pContents.dest, data = pContents.data})
+					net.networkDaemonTimeout = os.startTimer(2)
+				end
+				endpointTable = {}
+			elseif forwardedPacketTimers[event[2]] then
+				forwardedPacketIDs[forwardedPacketTimers[event[2]]] = nil
+				forwardedPacketTimers[event[2]] = nil
 			end
-			endpointTable = {}
 		end
 	end
 end
