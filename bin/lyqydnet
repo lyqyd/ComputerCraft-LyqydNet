@@ -84,8 +84,14 @@ function rednet.send(recipient, message, protocol)
 end
 
 function rednet.broadcast(message)
-	return net.raw_send(65535, message)
+	for side in pairs(net.modems) do
+		net.raw_send(side, 65535, message)
+		net.raw_send(side, 65533, message)
+	end
 end
+
+local rnReceivedMessages = {}
+local rnReceivedTimeouts = {}
 
 local function processModemMessage(event, filter)
 	if type(event[5]) == "table" and event[5].lyqydnet then
@@ -113,6 +119,14 @@ local function processModemMessage(event, filter)
 			end
 		end
 	else
+		if type(event[5]) == "table" and event[5].nMessageID then
+			if not rnReceivedMessages[event[5].nMessageID] then
+				rnReceivedMessages[event[5].nMessageID] = true
+				rnReceivedTimeouts[os.startTimer(30)] = event[5].nMessageID
+			else
+				return
+			end
+		end
 		if modemState[event[2]] and (event[3] == os.computerID() or event[3] == 65535) then
 			if not filter or filter == "rednet_message" then
 				if term.current then
@@ -138,6 +152,9 @@ if not process then
 					processModemMessage(event, filter)
 				elseif event[1] == "timer" and event[2] == net.networkDaemonTimeout then
 					coroutine.resume(net.daemonTable.netd, unpack(event))
+				elseif event[1] == "timer" and rnReceivedTimeouts[event[2]] then
+					rnReceivedMessages[rnReceivedTimeouts[event[2]]] = nil
+					rnReceivedTimeouts[event[2]] = nil
 				else
 					if not filter or filter == event[1] then
 						return unpack(event)
@@ -500,12 +517,18 @@ if process and process.id() then
 				end
 			end
 			if event[3] == os.getComputerID() or event[3] == RN_BROADCAST and (type(event[5]) ~= "table" or not event[5].lyqydnet or event[5].type ~= "RM") then
-				for pNum, pInfo in pairs(process.list) do
-					if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
-						if term.current then
-							pInfo:queue("rednet_message", event[4], event[5].message, event[5].sProtocol)
-						else
-							pInfo:queue("rednet_message", event[4], event[5], event[6])
+				if type(event[5]) == "table" and event[5].nMessageID then
+					if not rnReceivedMessages[event[5].nMessageID] then
+						rnReceivedMessages[event[5].nMessageID] = true
+						rnReceivedTimeouts[os.startTimer(30)] = event[5].nMessageID
+						for pNum, pInfo in pairs(process.list) do
+							if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
+								if term.current then
+									pInfo:queue("rednet_message", event[4], event[5].message, event[5].sProtocol)
+								else
+									pInfo:queue("rednet_message", event[4], event[5], event[6])
+								end
+							end
 						end
 					end
 				end
@@ -532,6 +555,9 @@ if process and process.id() then
 					end
 				end
 			end
+		elseif event[1] == "timer" and rnReceivedTimeouts[event[2]] then
+			rnReceivedMessages[rnReceivedTimeouts[event[2]]] = nil
+			rnReceivedTimeouts[event[2]] = nil
 		elseif event[1] == "terminate" then
 			return
 		end
