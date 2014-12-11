@@ -93,6 +93,7 @@ local function processModemMessage(event, filter)
 			net.send(packet.new("PS", event[4], event[5], 4, 4))
 		end
 		if event[5].destination ~= os.computerID() then
+			event[5].side = event[2]
 			coroutine.resume(net.daemonTable.netd, "lyqydnet_packet", event[5])
 		elseif event[5].type == "RM" and (not filter or filter == "rednet_message") then
 			if term.current then
@@ -160,7 +161,7 @@ if #args >= 1 then
 		routing = true
 		--open rednet repeating channel.
 		for side in pairs(net.modems) do
-			peripherl.call(side, "open", 65533)
+			peripheral.call(side, "open", 65533)
 		end
 		if args[2] and args[2] == "longlink" then
 			longlink = true
@@ -317,7 +318,7 @@ function netDaemon()
 				end
 			elseif pack.type == "HC" then
 				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost)
-				net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name net.routeTable[routeNum].interface = pack.payload.gateway, pack.payload.cost, pack.payload.label, pack.side
+				net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name, net.routeTable[routeNum].interface = pack.payload.gateway, pack.payload.cost, pack.payload.label, pack.side
 				saveHosts()
 			elseif pack.type == "HQ" then
 				if (pack.payload.label and pack.payload.label == os.getComputerLabel()) or (pack.payload.id and pack.payload.id == os.computerID()) then
@@ -412,7 +413,7 @@ function netDaemon()
 					routing = true
 					--open rednet repeating channel.
 					for side in pairs(net.modems) do
-						peripherl.call(side, "open", 65533)
+						peripheral.call(side, "open", 65533)
 					end
 				elseif instruction == "longlink" then
 					longlink = true
