@@ -102,6 +102,8 @@ local function processModemMessage(event, filter)
 			end
 		else
 			if event[5].toSock and net.socketTable[event[5].toSock] then
+				--add interface name for netd.
+				if event[5].toSock == 4 then event[5].side = event[2] end
 				if net.socketTable[event[5].toSock] == coroutine.running() and (not filter or filter == "lyqydnet_packet") then
 					os.queueEvent("lyqydnet_packet", event[5])
 				else
@@ -150,10 +152,16 @@ local longlink = false
 local forwardTable = {}
 local endpointTable = {}
 local infoWaitTable = {}
+--used for forwarding RM packets, if term.current then store the ID so as to not repeat them.
+local forwardedPacketIDs = {}
 
 if #args >= 1 then
 	if args[1] == "route" then
 		routing = true
+		--open rednet repeating channel.
+		for side in pairs(net.modems) do
+			peripherl.call(side, "open", 65533)
+		end
 		if args[2] and args[2] == "longlink" then
 			longlink = true
 		end
@@ -165,7 +173,7 @@ local function readHosts()
 		local file = io.open("/etc/hosts", "r" )
 		local line = file:read()
 		while line do
-			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTR]) "), string.match(line, ";[CTR] ([^\n]+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"))
+			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTR])"), string.match(line, ";[CTR]%.?%a* ([^\n]+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"), string.match(line, ";[CTR]%.(%a+)"))
 			line = file:read()
 		end
 		file:close()
@@ -179,7 +187,7 @@ local function saveHosts()
 	if file then
 		for rNum, rInfo in ipairs(net.routeTable) do
 			if rInfo then
-				file:write(rInfo.idNum..":"..rInfo.gateway..","..rInfo.cost..";"..rInfo.type.." "..rInfo.name.."\n")
+				file:write(rInfo.idNum..":"..rInfo.gateway..","..rInfo.cost..";"..rInfo.type.."."..rInfo.interface.." "..rInfo.name.."\n")
 			end
 		end
 		file:close()
@@ -249,7 +257,7 @@ function netDaemon()
 		if event[1] == "lyqydnet_packet" then
 			local pack = event[2]
 			if pack.type == "HA" then
-				local newRoute = net.add_route(pack.origin, pack.payload.type, pack.payload.label, -1, 0)
+				local newRoute = net.add_route(pack.origin, pack.payload.type, pack.payload.label, -1, 0, pack.side)
 				saveHosts()
 				if routing then 
 					net.send(packet.new("HT", pack.origin, createHostTable(newRoute), 4, 4))
@@ -272,18 +280,18 @@ function netDaemon()
 					--if the computer coming online was a router that didn't respond to a forwarded packet, forward the packet again.
 					for pNum, pContents in ipairs(forwardTable) do
 						if pContents.dest == pack.origin then
-							net.raw_send(pack.origin, pContents.data)
+							net.raw_send(net.routeTable[net.getRouteFromCID(pack.origin)].interface, pack.origin, pContents.data)
 						end
 					end
 					--if the computer coming online was an endpoint, send on data for it.
 					for pNum, pContents in ipairs(infoWaitTable) do
 						if pContents.dest == pack.origin then
-							net.raw_send(pack.origin, pContents.data)
+							net.raw_send(net.routeTable[net.getRouteFromCID(pack.origin)].interface, pack.origin, pContents.data)
 						end
 					end
 				end
 			elseif pack.type == "HI" then
-				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost)
+				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost, pack.side)
 				saveHosts()
 				if routing then
 					for _, host in ipairs(infoWaitTable) do
@@ -309,7 +317,7 @@ function netDaemon()
 				end
 			elseif pack.type == "HC" then
 				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost)
-				net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name = pack.payload.gateway, pack.payload.cost, pack.payload.label
+				net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name net.routeTable[routeNum].interface = pack.payload.gateway, pack.payload.cost, pack.payload.label, pack.side
 				saveHosts()
 			elseif pack.type == "HQ" then
 				if (pack.payload.label and pack.payload.label == os.getComputerLabel()) or (pack.payload.id and pack.payload.id == os.computerID()) then
@@ -317,14 +325,14 @@ function netDaemon()
 						label = os.getComputerLabel(),
 						type = turtle and "T" or (routing and "R" or "C"),
 					}
-					net.raw_send(65535, packet.new("HA", 65535, body, 4, 4))
+					net.raw_send(pack.side, 65535, packet.new("HA", 65535, body, 4, 4))
 				elseif routing then
 					if pack.payload.label then
 						local route = net.routeFromName(pack.payload.label)
-						net.raw_send(net.CIDFromRoute(route), pack)
+						net.raw_send(net.routeTable[route].interface, net.CIDFromRoute(route), pack)
 						net.remove_route(route)
 					elseif pack.payload.id then
-						net.raw_send(tonumber(pack.payload.id), pack)
+						net.raw_send(net.routeTable[tonumber(pack.payload.id)].interface, tonumber(pack.payload.id), pack)
 						net.remove_route(net.routeFromCID(pack.payload.id))
 					end
 				else
@@ -348,7 +356,7 @@ function netDaemon()
 						for rNum, rInfo in ipairs(net.routeTable) do
 							if rInfo and rInfo.cost == 0 and rInfo.type ~= "R" then
 								--send HR packet to all close non-routers.
-								net.raw_send(rInfo.idNum, pack)
+								net.raw_send(rInfo.interface, rInfo.idNum, pack)
 								break
 							end
 						end
@@ -357,10 +365,11 @@ function netDaemon()
 				saveHosts()
 			elseif pack.type == "HT" then
 				for _, hostInfo in ipairs(pack.payload) do
-					net.add_route(hostInfo.id, hostInfo.type, hostInfo.label, hostInfo.gateway, hostInfo.cost)
+					net.add_route(hostInfo.id, hostInfo.type, hostInfo.label, hostInfo.gateway, hostInfo.cost, pack.side)
 				end
 				saveHosts()
 			elseif routing and pack.type ~= "SI" and pack.destination ~= os.computerID() then
+				--we are forwarding a packet to another computer.
 				if pack.type == "HI" or pack.type == "HC" then
 					--these are host information packets and must be manipulated to ensure correct information.
 					pack.payload.gateway = os.computerID()
@@ -382,7 +391,6 @@ function netDaemon()
 					net.send(packet.new("RR", pack.origin, "not_found"))
 				end
 			elseif pack.type == "PS" then
-				print(#endpointTable)
 				--packet success confirmation
 				for pNum, pContents in ipairs(forwardTable) do
 					if testEquality(pContents.data, pack.payload) then
@@ -392,28 +400,20 @@ function netDaemon()
 				end
 				saveForwardTable()
 				for pNum, pContents in ipairs(endpointTable) do
-					print(pNum)
-					print(testEquality(pContents.data, pack.payload))
 					if testEquality(pContents.data, pack.payload) then
 						table.remove(endpointTable, pNum)
 						break
 					end
 				end
-				print(#endpointTable)
 			elseif pack.type == "SI" then
 				--instruction
 				local instruction = type(pack.payload) == "table" and pack.payload.instruction or pack.payload
 				if instruction == "route" then
 					routing = true
-					--[[if fs.exists( "etc/packets" ) then
-						local file = io.open( "etc/packets", "r" )
-						local sLine = file:read()
-						while sLine do
-							table.insert(forwardTable, {dest = string.match(sLine, "(%d+)>.*"), data = string.match(sLine, "%d+>(.*)")})
-							sLine = file:read()
-						end
-						file:close()
-					end]]
+					--open rednet repeating channel.
+					for side in pairs(net.modems) do
+						peripherl.call(side, "open", 65533)
+					end
 				elseif instruction == "longlink" then
 					longlink = true
 				elseif instruction == "announce" then
@@ -423,7 +423,9 @@ function netDaemon()
 							type = turtle and "T" or (routing and "R" or "C"),
 						}
 						local pack = packet.new("HA", 65535, body, 4, 4)
-						net.raw_send(65535, pack)
+						for side in pairs(net.modems) do
+							net.raw_send(side, 65535, pack)
+						end
 					end
 				elseif instruction == "turtlepacket" then
 					table.insert(endpointTable, {dest = pack.payload.data.destination, data = pack.payload.data})
@@ -502,9 +504,11 @@ if process and process.id() then
 						end
 					end
 				elseif event[5].destination ~= os.computerID() or event[5].type == "HA" or event[5].type == "HT" or event[5].type == "HI" then
+					event[5].side = event[2]
 					process.getFromName("netd"):queue("lyqydnet_packet", event[5])
 				else
 					if net.socketTable[event[5].toSock] then
+						if event[5].toSock == 4 then event[5].side = event[2] end
 						process.list[pidFromThread(net.socketTable[event[5].toSock])]:queue("lyqydnet_packet", event[5])
 					end
 				end

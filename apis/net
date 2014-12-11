@@ -2,23 +2,22 @@ routeTable = {}
 daemonTable = {}
 socketTable = {}
 networkDaemonTimeout = nil
-local modemSide
+modems = {}
 
-function netInit (_side)
+function netInit(_side)
 	--initialize network communications
 	if net.daemonTable.netd then
 		local open = false
 		if not _side then
 			for n,side in pairs(rs.getSides()) do
 				if peripheral.getType(side) == "modem" then
-					modemSide = side
+					modems[side] = peripheral.call(side, "isWireless") and "wireless" or "wired"
 					rednet.open(side)
 					open = true
-					break
 				end
 			end
 		else
-			modemSide = _side
+			modems[_side] = peripheral.call(_side, "isWireless") and "wireless" or "wired"
 			rednet.open(_side)
 			open = true
 		end
@@ -28,13 +27,13 @@ function netInit (_side)
 	return false
 end
 
-function daemonAdd (dName, dFunction, socket)
+function daemonAdd(dName, dFunction, socket)
 	daemonTable[dName] = coroutine.create(dFunction)
 	if socket then socketTable[tonumber(socket)] = daemonTable[dName] end
 	coroutine.resume(daemonTable[dName], 0, "SI", "start")
 end
 
-function daemonRemove (dName)
+function daemonRemove(dName)
 	if daemonTable[dName] then
 		for sNum, sInfo in pairs(socketTable) do
 			if sInfo == dName then
@@ -48,21 +47,21 @@ function daemonRemove (dName)
 	end
 end
 
-function routeFromName (name)
+function routeFromName(name)
 	for rNum,rInfo in ipairs(routeTable) do
 		if rInfo and rInfo.name == tostring(name) then return rNum end
 	end
 	return false
 end
 
-function routeFromCID (compID)
+function routeFromCID(compID)
 	for rNum,rInfo in ipairs(routeTable) do
 		if rInfo and rInfo.idNum == tonumber(compID) then return rNum end
 	end
 	return false
 end
 
-function nameFromRoute (route)
+function nameFromRoute(route)
 	if routeTable[route] then
 		return routeTable[route].name
 	else
@@ -70,7 +69,7 @@ function nameFromRoute (route)
 	end
 end
 
-function CIDFromRoute (route)
+function CIDFromRoute(route)
 	if routeTable[route] then
 		return routeTable[route].idNum
 	else
@@ -84,13 +83,13 @@ function send(pack, ll)
 		local route = net.routeTable[routeNum]
 		if route.cost > 0 then
 			if ll then pack.confirm = true end
-			net.raw_send(route.gateway, pack)
+			net.raw_send(route.interface, route.gateway, pack)
 			return true
 		else
 			if route.type == "T" then
 				coroutine.resume(daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, {instruction = "turtlepacket", data = pack}))
 			end
-			net.raw_send(route.idNum, pack)
+			net.raw_send(route.interface, route.idNum, pack)
 			return true
 		end
 	elseif pack.type == "RM" then
@@ -102,21 +101,25 @@ function send(pack, ll)
 				message = pack.payload,
 				sProtocol = pack.protocol,
 			}
-			net.raw_send(pack.destination, messTable)
-			net.raw_send(65533, messTable)
+			for side in pairs(net.modems) do
+				net.raw_send(side, pack.destination, messTable)
+				net.raw_send(side, 65533, messTable)
+			end
 		else
-			net.raw_send(pack.destination, pack.payload)
+			for side in pairs(net.modems) do
+				net.raw_send(side, pack.destination, pack.payload)
+			end
 		end
 		return true
 	end
 	return false, "could not send packet"
 end
 
-function raw_send (recipient, message)
-	peripheral.call(modemSide, "transmit", recipient, os.computerID(), message)
+function raw_send(side, recipient, message)
+	peripheral.call(side, "transmit", recipient, os.computerID(), message)
 end
 
-function add_route (idNumber, compType, compName, gateway, cost)
+function add_route(idNumber, compType, compName, gateway, cost, interface)
 	idNumber = tonumber(idNumber)
 	compType = tostring(compType)
 	compName = tostring(compName)
@@ -131,6 +134,7 @@ function add_route (idNumber, compType, compName, gateway, cost)
 				if rInfo.cost > cost then
 					rInfo.gateway = gateway
 					rInfo.cost = cost
+					rInfo.interface = interface
 				end
 				return rNum
 			end
@@ -142,11 +146,12 @@ function add_route (idNumber, compType, compName, gateway, cost)
 	route.name = compName
 	route.gateway = gateway
 	route.cost = cost
+	route.interface = interface
 	table.insert(routeTable, route)
 	return #routeTable
 end
 
-function remove_route (route)
+function remove_route(route)
 	if route then
 		local file = io.open("/etc/hosts", "w" )
 		if file then
