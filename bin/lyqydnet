@@ -6,6 +6,10 @@ os.loadAPI("connection")
 os.loadAPI("netfile")
 os.loadAPI("netscreen")
 
+local function log(level, message)
+	os.queueEvent("service_"..level, LyqydOS and process.id() or "lyqydnet", message)
+end
+
 --modread
 
 local oldPeriphCall = peripheral.call
@@ -180,12 +184,14 @@ local forwardedPacketTimers = {}
 if #args >= 1 then
 	if args[1] == "route" then
 		routing = true
+		log("info", "routing enabled")
 		--open rednet repeating channel.
 		for side in pairs(net.modems) do
 			peripheral.call(side, "open", 65533)
 		end
 		if args[2] and args[2] == "longlink" then
 			longlink = true
+			log("info", "longlink enabled")
 		end
 	end
 end
@@ -273,15 +279,19 @@ local function createHostTable(exclude)
 end
 
 function netDaemon()
+	log("info", "reading hosts")
 	readHosts()
+	log("info", "read "..#net.routeTable.." hosts")
 	while true do
 		local event = {coroutine.yield()}
 		if event[1] == "lyqydnet_packet" then
+			log("info", "lyqydnet "..event[2].type.." packet received from "..event[2].origin)
 			local pack = event[2]
 			if pack.type == "HA" then
 				local newRoute = net.add_route(pack.origin, pack.payload.type, pack.payload.label, -1, 0, pack.side)
 				saveHosts()
 				if routing then 
+					log("info", "sending HT to "..pack.origin)
 					net.send(packet.new("HT", pack.origin, createHostTable(newRoute), 4, 4))
 					local hostData = {
 						id = pack.origin,
@@ -294,20 +304,24 @@ function netDaemon()
 					--pass the new host information on to other routers as well as nearby hosts.
 					for rNum, rInfo in ipairs(net.routeTable) do
 						if rInfo and rInfo.type == "R" and rNum ~= newRoute then
+							log("info", "sending HI to "..rInfo.idNum)
 							net.send(packet.new("HI", rInfo.idNum, hostData, 4, 4))
 						elseif rInfo and rInfo.type ~= "R" and rNum ~= newRoute and rInfo.cost == 0 then
+							log("info", "sending HI to "..rInfo.idNum)
 							net.send(packet.new("HI", rInfo.idNum, hostData, 4, 4))
 						end
 					end
 					--if the computer coming online was a router that didn't respond to a forwarded packet, forward the packet again.
 					for pNum, pContents in ipairs(forwardTable) do
 						if pContents.dest == pack.origin then
+							log("info", "re-sending packet to "..pack.origin)
 							net.raw_send(net.routeTable[net.getRouteFromCID(pack.origin)].interface, pack.origin, pContents.data)
 						end
 					end
 					--if the computer coming online was an endpoint, send on data for it.
 					for pNum, pContents in ipairs(infoWaitTable) do
 						if pContents.dest == pack.origin then
+							log("info", "re-sending endpoint packet to "..pack.origin)
 							net.raw_send(net.routeTable[net.getRouteFromCID(pack.origin)].interface, pack.origin, pContents.data)
 						end
 					end
@@ -315,6 +329,7 @@ function netDaemon()
 			elseif pack.type == "HI" then
 				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost, pack.side)
 				saveHosts()
+				log("info", "saved hosts")
 				if routing then
 					for _, host in ipairs(infoWaitTable) do
 						if pack.payload.id == host then
@@ -330,6 +345,7 @@ function netDaemon()
 							--update and correct nearby hosts.
 							for rNum, rInfo in ipairs(net.routeTable) do
 								if rInfo and rInfo.type ~= "R" and rInfo.idNum ~= host and rInfo.cost == 0 then
+									log("info", "sending HC update to "..rInfo.idNum)
 									net.send(packet.new("HC", rInfo.idNum, hostData, 4, 4))
 								end
 							end
@@ -341,14 +357,17 @@ function netDaemon()
 				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost)
 				net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name, net.routeTable[routeNum].interface = pack.payload.gateway, pack.payload.cost, pack.payload.label, pack.side
 				saveHosts()
+				log("info", "saved hosts")
 			elseif pack.type == "HQ" then
 				if (pack.payload.label and pack.payload.label == os.getComputerLabel()) or (pack.payload.id and pack.payload.id == os.computerID()) then
 					local body = {
 						label = os.getComputerLabel(),
 						type = turtle and "T" or (routing and "R" or "C"),
 					}
+					log("info", "broadcasting HA in response")
 					net.raw_send(pack.side, 65535, packet.new("HA", 65535, body, 4, 4))
 				elseif routing then
+					log("info", "sending HQ to see if host is in range")
 					if pack.payload.label then
 						local route = net.routeFromName(pack.payload.label)
 						net.raw_send(net.routeTable[route].interface, net.CIDFromRoute(route), pack)
@@ -358,6 +377,7 @@ function netDaemon()
 						net.remove_route(net.routeFromCID(pack.payload.id))
 					end
 				else
+					log("info", "removing host")
 					if pack.payload.label then
 						net.remove_route(net.routeFromName(pack.payload.label))
 					elseif pack.payload.id then
@@ -368,6 +388,7 @@ function netDaemon()
 				--host removal.
 				local routeNum = net.routeFromCID(pack.payload)
 				if routeNum then
+					log("info", "removing route for id "..net.routeTable[routeNum].idNum)
 					net.remove_route(routeNum)
 					for cNum, cInfo in pairs(connection.connectionTable) do
 						if cInfo and cInfo.remote == pack.payload then
@@ -378,6 +399,7 @@ function netDaemon()
 						for rNum, rInfo in ipairs(net.routeTable) do
 							if rInfo and rInfo.cost == 0 and rInfo.type ~= "R" then
 								--send HR packet to all close non-routers.
+								log("info", "sending HR to "..rInfo.idNum)
 								net.raw_send(rInfo.interface, rInfo.idNum, pack)
 								break
 							end
@@ -390,6 +412,7 @@ function netDaemon()
 					net.add_route(hostInfo.id, hostInfo.type, hostInfo.label, hostInfo.gateway, hostInfo.cost, pack.side)
 				end
 				saveHosts()
+				log("info", "saved hosts")
 			elseif routing and pack.type ~= "SI" and pack.destination ~= os.computerID() then
 				--we are forwarding a packet to another computer.
 				if pack.type == "HI" or pack.type == "HC" then
@@ -399,30 +422,37 @@ function netDaemon()
 				end
 				if longlink then
 					pack.confirm = true
+					log("info", "adding packet to forward table")
 					table.insert(forwardTable, {dest = pack.destination, data = pack})
 					saveForwardTable()
+					log("info", "saved forward table")
 				end
 				if net.routeTable[net.routeFromCID(pack.destination)].cost == 0 then
 					--endpoint confirmation
 					pack.confirm = true
-					print(pack.destination)
+					log("info", "adding packet to forward table")
 					table.insert(endpointTable, {dest = pack.destination, data = pack})
 					net.networkDaemonTimeout = os.startTimer(2)
+					log("info", "queued timer id "..net.networkDaemonTimeout.." for netDaeTime")
 				end
 				if not net.send(pack, longlink) then
+					log("info", "packet to "..pack.destination.." failed, sending RR")
 					net.send(packet.new("RR", pack.origin, "not_found"))
 				end
 			elseif pack.type == "PS" then
 				--packet success confirmation
 				for pNum, pContents in ipairs(forwardTable) do
 					if testEquality(pContents.data, pack.payload) then
+						log("info", "forwarded packet found, removing")
 						table.remove(forwardTable, pNum)
 						break
 					end
 				end
 				saveForwardTable()
+				log("info", "saved foward table")
 				for pNum, pContents in ipairs(endpointTable) do
 					if testEquality(pContents.data, pack.payload) then
+						log("info", "endpoint packet found, removing")
 						table.remove(endpointTable, pNum)
 						break
 					end
@@ -431,6 +461,7 @@ function netDaemon()
 				--instruction
 				local instruction = type(pack.payload) == "table" and pack.payload.instruction or pack.payload
 				if instruction == "route" then
+					log("info", "routing enabled")
 					routing = true
 					--open rednet repeating channel.
 					for side in pairs(net.modems) do
@@ -438,8 +469,10 @@ function netDaemon()
 					end
 				elseif instruction == "longlink" then
 					longlink = true
+					log("info", "longlink enabled")
 				elseif instruction == "announce" then
 					if os.getComputerLabel() then
+						log("info", "announcing")
 						local body = {
 							label = os.getComputerLabel(),
 							type = turtle and "T" or (routing and "R" or "C"),
@@ -448,14 +481,18 @@ function netDaemon()
 						for side in pairs(net.modems) do
 							net.raw_send(side, 65535, pack)
 						end
+					else
+						log("warning", "no computer label")
 					end
 				elseif instruction == "turtlepacket" then
 					table.insert(endpointTable, {dest = pack.payload.data.destination, data = pack.payload.data})
 					net.networkDaemonTimeout = os.startTimer(2)
+					log("info", "queued timer id "..net.networkDaemonTimeout.." for netDaeTime")
 				end
 			end
 		elseif event[1] == "rednet_repeat" then
 			if not forwardedPacketIDs[event[2].nMessageID] then
+				log("info", "rednet repeating #"..event[2].nMessageID)
 				forwardedPacketIDs[event[2].nMessageID] = true
 				forwardedPacketTimers[os.startTimer(30)] = event[2].nMessageID
 				for side in pairs(net.modems) do
@@ -465,15 +502,19 @@ function netDaemon()
 			end
 		elseif event[1] == "timer" then
 			if event[2] == net.networkDaemonTimeout then
+				log("info", "network daemon timeout timer")
 				for hNum, hContents in ipairs(infoWaitTable) do
+					log("info", "sending HR for id "..hContents.dest)
 					for rNum, rInfo in ipairs(net.routeTable) do
 						if rInfo and rInfo.type ~= "R" then
 							net.send(packet.new("HR", rInfo.idNum, hContents.dest, 4, 4))
 						end
 					end
 				end
+				log("info", "reset infoWaitTable")
 				infoWaitTable = {}
 				for pNum, pContents in ipairs(endpointTable) do
+					log("info", "send HQ for id "..pContents.dest)
 					for rNum, rInfo in ipairs(net.routeTable) do
 						if rInfo and rInfo.type == "R" then
 							net.send(packet.new("HQ", rInfo.idNum, {id = pContents.dest}, 4, 4))
@@ -481,11 +522,15 @@ function netDaemon()
 					end
 					net.send(packet.new("HQ", pContents.dest, {id = pContents.dest}, 4, 4))
 					net.remove_route(net.routeFromCID(pContents.dest))
+					saveHosts()
+					log("info", "saved hosts")
 					table.insert(infoWaitTable, {dest = pContents.dest, data = pContents.data})
 					net.networkDaemonTimeout = os.startTimer(2)
 				end
+				log("info", "reset endpointTable")
 				endpointTable = {}
 			elseif forwardedPacketTimers[event[2]] then
+				log("info", "reset rednet repeated #"..forwardedPacketIDs[forwardedPacketTimers[event[2]]])
 				forwardedPacketIDs[forwardedPacketTimers[event[2]]] = nil
 				forwardedPacketTimers[event[2]] = nil
 			end
