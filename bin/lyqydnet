@@ -29,6 +29,8 @@ end
 
 local modemState = {}
 
+local hostedProtocols = {}
+
 local validSides = {}
 for k, v in pairs(rs.getSides()) do
 	validSides[v] = true
@@ -67,6 +69,77 @@ if not process then
 	function rednet.isOpen(side)
 		if peripheral.getType(side) == "modem" then
 			return modemState[side]
+		end
+	end
+
+	function rednet.host(protocol, hostname)
+		if type(protocol) ~= "string" or type(hostname) ~= "string" then
+			error("expected string, string", 2)
+		end
+		if hostname == "localhost" then
+			error("Reserved hostname", 2)
+		end
+		if hostedProtocols[protocol] ~= hostname then
+			if not rednet.lookup(protocol, hostname) then
+				error("Hostname in use", 2)
+			end
+			hostedProtocols[protocol] = hostname
+		end
+	end
+
+	function rednet.unhost(protocol)
+		if type(protocol) ~= "string" then
+			error("expected string", 2)
+		end
+		hostedProtocols[protocol] = nil
+	end
+
+	function rednet.lookup(protocol, hostname)
+		if type( protocol ) ~= "string" then
+			error( "expected string", 2 )
+		end
+
+		local result
+		if hostname == nil then
+			result = {}
+		end
+
+		if hostedProtocols[protocol] then
+			if hostname == nil then
+				table.insert(result, os.getComputerID())
+			elseif hostname == "localhost" or hostname == hostedProtocols[protocol] then
+				return os.getComputerID()
+			end
+		end
+
+		if not rednet.isOpen() then
+			if result then
+				unpack(result)
+			end
+			return nil
+		end
+
+		rednet.broadcast({sType = "lookup", sProtocol = protocol, sHostname = hostname,}, "dns")
+
+		local timer = os.startTimer(2)
+		while true do
+			local event = {os.pullEvent()}
+			if event[1] == "rednet_message" then
+				if event[4] == "dns" and event[3].sType == "lookup response" then
+					if event[3].sProtocol == protocol then
+						if not hostname then
+							table.insert(result, event[2])
+						elseif event[3].sHostname == hostname then
+							return event[2]
+						end
+					end
+				end
+			elseif event[1] == "timer" and event[2] == timer then
+				break
+			end
+		end
+		if result then
+			return unpack(result)
 		end
 	end
 end
@@ -108,6 +181,12 @@ local function processModemMessage(event, filter)
 		elseif event[5].type == "RM" and (not filter or filter == "rednet_message") then
 			if term.current then
 				os.queueEvent("rednet_message", event[5].origin, event[5].payload, event[5].protocol)
+				if event[5].protocol == "dns" and event[5].payload.sType == "lookup" then
+					local hostname = hostedProtocols[event[5].payload.sProtocol]
+					if hostname then
+						rednet.send(event[4], {sType = "lookup response", sHostname = hostname, sProtocol = event[5].payload.sProtocol}, "dns")
+					end
+				end
 			else
 				os.queueEvent("rednet_message", event[5].origin, event[5].payload, 0)
 			end
@@ -135,6 +214,12 @@ local function processModemMessage(event, filter)
 			if not filter or filter == "rednet_message" then
 				if term.current then
 					os.queueEvent("rednet_message", event[4], event[5].message, event[5].sProtocol)
+					if event[5].sProtocol == "dns" and event[5].message.sType == "lookup" then
+						local hostname = hostedProtocols[event[5].message.sProtocol]
+						if hostname then
+							rednet.send(event[4], {sType = "lookup response", sHostname = hostname, sProtocol = event[5].message.sProtocol}, "dns")
+						end
+					end
 				else
 					os.queueEvent("rednet_message", event[4], event[5], event[6])
 				end
@@ -586,6 +671,17 @@ if process and process.id() then
 								end
 							end
 						end
+						if event[5].sProtocol == "dns" and event[5].message.sType == "lookup" then
+							for pID, proc in ipairs(process.list) do
+								if proc and proc.rednet and proc.rednet.hosting then
+									local hostname = proc.rednet.hosting[event[5].message.sProtocol]
+									if hostname then
+										rednet.send(event[4], {sType = "lookup response", sHostname = hostname, sProtocol = event[5].message.sProtocol}, "dns")
+										break
+									end
+								end
+							end
+						end
 					end
 				end
 			end
@@ -598,6 +694,18 @@ if process and process.id() then
 								pInfo:queue("rednet_message", event[5].origin, event[5].payload, event[5].protocol)
 							else
 								pInfo:queue("rednet_message", event[5].origin, event[5].payload, 0)
+							end
+						end
+					end
+					--dns response
+					if event[5].protocol == "dns" and event[5].payload.sType == "lookup" then
+						for pID, proc in ipairs(process.list) do
+							if proc and proc.rednet and proc.rednet.hosting then
+								local hostname = proc.rednet.hosting[event[5].payload.sProtocol]
+								if hostname then
+									rednet.send(event[4], {sType = "lookup response", sHostname = hostname, sProtocol = event[5].payload.sProtocol}, "dns")
+									break
+								end
 							end
 						end
 					end
