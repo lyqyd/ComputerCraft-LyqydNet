@@ -332,17 +332,18 @@ function netDaemon()
 				saveHosts()
 				log("info", "saved hosts")
 				if routing then
+					local hostData = {
+						id = pack.payload.id,
+						gateway = os.computerID(),
+						cost = net.routeTable[routeNum].cost + 1,
+						type = pack.payload.type,
+						label = pack.payload.label,
+					}
+
 					for _, host in ipairs(infoWaitTable) do
 						if pack.payload.id == host then
 							--this was a dropped host we'd been waiting on info for.
 							table.remove(infoWaitTable, _)
-							local hostData = {
-								id = pack.payload.id,
-								gateway = os.computerID(),
-								cost = net.routeTable[routeNum].cost + 1,
-								type = pack.payload.type,
-								label = pack.payload.label,
-							}
 							--update and correct nearby hosts.
 							for rNum, rInfo in ipairs(net.routeTable) do
 								if rInfo and rInfo.type ~= "R" and rInfo.idNum ~= host and rInfo.cost == 0 then
@@ -351,6 +352,13 @@ function netDaemon()
 								end
 							end
 							break
+						end
+					end
+					--also update nearby hosts about the potentially new route.
+					for rNum, rInfo in ipairs(net.routeTable) do
+						if rInfo and rInfo.type ~= "R" and rNum ~= routeNum and rInfo.cost == 0 then
+							log("info", "sending HI to "..rInfo.idNum)
+							net.send(packet.new("HI", rInfo.idNum, hostData, 4, 4))
 						end
 					end
 				end
