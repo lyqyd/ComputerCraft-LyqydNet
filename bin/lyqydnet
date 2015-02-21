@@ -7,7 +7,7 @@ os.loadAPI("netfile")
 os.loadAPI("netscreen")
 
 local function log(level, message)
-	os.queueEvent("service_"..level, LyqydOS and process.id() or "lyqydnet", message)
+	os.queueEvent("service_message", level, LyqydOS and process.id() or "lyqydnet", message)
 end
 
 --modread
@@ -290,6 +290,7 @@ function netDaemon()
 			if pack.type == "HA" then
 				local newRoute = net.add_route(pack.origin, pack.payload.type, pack.payload.label, -1, 0, pack.side)
 				saveHosts()
+				log("info", "saved hosts")
 				if routing then 
 					log("info", "sending HT to "..pack.origin)
 					net.send(packet.new("HT", pack.origin, createHostTable(newRoute), 4, 4))
@@ -538,12 +539,14 @@ function netDaemon()
 	end
 end
 
-net.daemonAdd("netd", netDaemon, 4)
-net.netInit()
+
 
 if process and process.id() then
 	--if run in lyqydos, set up correct processes.
-	process.new(netDaemon, "netd")
+	local nd = process.new(netDaemon, "netd")
+	net.daemonTable.netd = nd.thread
+	net.socketTable[4] = net.daemonTable.netd
+	net.netInit()
 
 	local function pidFromThread(thread)
 		for pNum, pInfo in pairs(process.list) do
@@ -607,4 +610,7 @@ if process and process.id() then
 			return
 		end
 	end
+else
+	net.daemonAdd("netd", netDaemon, 4)
+	net.netInit()
 end
