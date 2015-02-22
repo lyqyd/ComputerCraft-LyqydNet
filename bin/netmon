@@ -13,6 +13,7 @@ end
 
 if not modem then return end
 
+modem.open(65535)
 for i = tonumber(args[1]), tonumber(args[2]) do
 	modem.open(i)
 end
@@ -20,6 +21,6 @@ end
 while true do
 	local event = {os.pullEvent()}
 	if event[1] == "modem_message" then
-		print(event[4]..": "..(type(event[5]) == "table" and textutils.serialize(event[5]) or tostring(event[5])))
+		print(event[4].."->"..event[3]..": "..(type(event[5]) == "table" and textutils.serialize(event[5]) or tostring(event[5])))
 	end
 end
