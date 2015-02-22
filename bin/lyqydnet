@@ -67,8 +67,16 @@ if not process then
 	end
 
 	function rednet.isOpen(side)
-		if peripheral.getType(side) == "modem" then
-			return modemState[side]
+		if side then
+			if peripheral.getType(side) == "modem" then
+				return modemState[side]
+			end
+		else
+			for n, side in ipairs(peripheral.getNames()) do
+				if rednet.isOpen(side) then
+					return true
+				end
+			end
 		end
 	end
 
@@ -95,6 +103,7 @@ if not process then
 	end
 
 	function rednet.lookup(protocol, hostname)
+		log("debug", "looking up p: "..protocol.." h: "..hostname)
 		if type( protocol ) ~= "string" then
 			error( "expected string", 2 )
 		end
@@ -160,11 +169,8 @@ function rednet.send(recipient, message, protocol)
 	error("No open sides")
 end
 
-function rednet.broadcast(message)
-	for side in pairs(net.modems) do
-		net.raw_send(side, 65535, message)
-		net.raw_send(side, 65533, message)
-	end
+function rednet.broadcast(message, protocol)
+	rednet.send(65535, message, protocol)
 end
 
 local rnReceivedMessages = {}
@@ -657,7 +663,7 @@ if process and process.id() then
 					end
 				end
 			end
-			if event[3] == os.getComputerID() or event[3] == RN_BROADCAST and (type(event[5]) ~= "table" or not event[5].lyqydnet or event[5].type ~= "RM") then
+			if event[3] == os.getComputerID() or event[3] == 65535 and (type(event[5]) ~= "table" or not event[5].lyqydnet or event[5].type ~= "RM") then
 				if type(event[5]) == "table" and event[5].nMessageID then
 					if not rnReceivedMessages[event[5].nMessageID] then
 						rnReceivedMessages[event[5].nMessageID] = true
@@ -686,7 +692,7 @@ if process and process.id() then
 				end
 			end
 			if type(event[5]) == "table" and event[5].lyqydnet then
-				if event[5].type == "RM" and (event[5].destination == os.getComputerID() or event[5].destination == RN_BROADCAST) then
+				if event[5].type == "RM" and (event[5].destination == os.getComputerID() or event[5].destination == 65535) then
 					--copied from lrnd
 					for pNum, pInfo in pairs(process.list) do
 						if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
