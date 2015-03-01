@@ -1,10 +1,20 @@
 local args = {...}
 
-os.loadAPI("net")
-os.loadAPI("packet")
-os.loadAPI("connection")
-os.loadAPI("netfile")
-os.loadAPI("netscreen")
+local function load(file)
+	if shell.resolveProgram(file) then
+		os.loadAPI(shell.resolveProgram(file))
+	elseif fs.exists(fs.combine("/usr/apis", file)) then
+		os.loadAPI(fs.combine("/usr/apis", file))
+	else
+		error("Could not load "..file.." API!")
+	end
+end
+
+load("net")
+load("packet")
+load("connection")
+load("netfile")
+load("netscreen")
 
 local function log(level, message)
 	os.queueEvent("service_message", level, LyqydOS and process.id() or "lyqydnet", message)
