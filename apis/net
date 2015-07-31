@@ -125,6 +125,9 @@ function add_route (idNumber, compType, compName, gateway, cost)
 	for rNum,rInfo in ipairs(routeTable) do
 		if rInfo then
 			if idNumber == rInfo.idNum then
+				if rInfo.name ~= compName then
+					rInfo.name = compName
+				end
 				if rInfo.type ~= compType then
 					rInfo.type = compType
 				end

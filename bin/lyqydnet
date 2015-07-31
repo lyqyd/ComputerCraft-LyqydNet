@@ -309,7 +309,7 @@ function netDaemon()
 				end
 			elseif pack.type == "HC" then
 				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost)
-				net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost, net.routeTable[routeNum].name = pack.payload.gateway, pack.payload.cost, pack.payload.label
+				net.routeTable[routeNum].gateway, net.routeTable[routeNum].cost = pack.payload.gateway, pack.payload.cost
 				saveHosts()
 			elseif pack.type == "HQ" then
 				if (pack.payload.label and pack.payload.label == os.getComputerLabel()) or (pack.payload.id and pack.payload.id == os.computerID()) then
