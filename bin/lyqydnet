@@ -14,7 +14,6 @@ local oldPullRaw = os.pullEventRaw
 if not process then
 	peripheral.call = function(...)
 		if not shell then
-			print("up in ur rednet co")
 			return false
 			--our logic here, since this should be inside rednet coroutine
 		else
@@ -374,7 +373,6 @@ function netDaemon()
 				if net.routeTable[net.routeFromCID(pack.destination)].cost == 0 then
 					--endpoint confirmation
 					pack.confirm = true
-					print(pack.destination)
 					table.insert(endpointTable, {dest = pack.destination, data = pack})
 					net.networkDaemonTimeout = os.startTimer(2)
 				end
@@ -391,14 +389,11 @@ function netDaemon()
 				end
 				saveForwardTable()
 				for pNum, pContents in ipairs(endpointTable) do
-					print(pNum)
-					print(testEquality(pContents.data, pack.payload))
 					if testEquality(pContents.data, pack.payload) then
 						table.remove(endpointTable, pNum)
 						break
 					end
 				end
-				print(#endpointTable)
 			elseif pack.type == "SI" then
 				--instruction
 				local instruction = type(pack.payload) == "table" and pack.payload.instruction or pack.payload
