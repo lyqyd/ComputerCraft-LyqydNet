@@ -31,7 +31,7 @@ end
 function daemonAdd (dName, dFunction, socket)
 	daemonTable[dName] = coroutine.create(dFunction)
 	if socket then socketTable[tonumber(socket)] = daemonTable[dName] end
-	coroutine.resume(daemonTable[dName], 0, "SI", "start")
+	coroutine.resume(daemonTable[dName], "lyqydnet_packet", packet.new("SI", 0, "start"))
 end
 
 function daemonRemove (dName)
