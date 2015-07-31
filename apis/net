@@ -87,8 +87,8 @@ function send(pack, ll)
 			net.raw_send(route.gateway, pack)
 			return true
 		else
-			if route.type == "T" then
-				coroutine.resume(daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, {instruction = "turtlepacket", data = pack}))
+			if route.type == "T" or route.type == "P" then
+				coroutine.resume(daemonTable.netd, "lyqydnet_packet", packet.new("SI", 0, {instruction = "endpoint", data = pack}))
 			end
 			net.raw_send(route.idNum, pack)
 			return true

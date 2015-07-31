@@ -165,7 +165,7 @@ local function readHosts()
 		local file = io.open("/etc/hosts", "r" )
 		local line = file:read()
 		while line do
-			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTR]) "), string.match(line, ";[CTR] ([^\n]+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"))
+			net.add_route(string.match(line, "(%d+):"), string.match(line, ";([CTRP]) "), string.match(line, ";[CTRP] ([^\n]+)"), string.match(line, ":(%d+),"), string.match(line, ",(%d+);"))
 			line = file:read()
 		end
 		file:close()
@@ -315,7 +315,7 @@ function netDaemon()
 				if (pack.payload.label and pack.payload.label == os.getComputerLabel()) or (pack.payload.id and pack.payload.id == os.computerID()) then
 					local body = {
 						label = os.getComputerLabel(),
-						type = turtle and "T" or (routing and "R" or "C"),
+						type = turtle and "T" or (pocket and "P" or (routing and "R" or "C")),
 					}
 					net.raw_send(65535, packet.new("HA", 65535, body, 4, 4))
 				elseif routing then
@@ -419,12 +419,12 @@ function netDaemon()
 					if os.getComputerLabel() then
 						local body = {
 							label = os.getComputerLabel(),
-							type = turtle and "T" or (routing and "R" or "C"),
+							type = turtle and "T" or (pocket and "P" or (routing and "R" or "C")),
 						}
 						local pack = packet.new("HA", 65535, body, 4, 4)
 						net.raw_send(65535, pack)
 					end
-				elseif instruction == "turtlepacket" then
+				elseif instruction == "endpoint" then
 					table.insert(endpointTable, {dest = pack.payload.data.destination, data = pack.payload.data})
 					net.networkDaemonTimeout = os.startTimer(2)
 				end
