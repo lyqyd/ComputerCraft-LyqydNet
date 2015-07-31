@@ -382,7 +382,6 @@ function netDaemon()
 					net.send(packet.new("RR", pack.origin, "not_found"))
 				end
 			elseif pack.type == "PS" then
-				print(#endpointTable)
 				--packet success confirmation
 				for pNum, pContents in ipairs(forwardTable) do
 					if testEquality(pContents.data, pack.payload) then
@@ -463,9 +462,9 @@ if process and process.id() then
 	netd:queue("lyqydnet_packet", packet.new("SI", 0, "start"))
 	net.netInit()
 
-	local function pidFromThread(thread)
+	local function procFromThread(thread)
 		for pNum, pInfo in pairs(process.list) do
-			if pInfo and pInfo.thread == thread then return pNum end
+			if pInfo and pInfo.thread == thread then return pInfo end
 		end
 	end
 
@@ -503,10 +502,10 @@ if process and process.id() then
 						end
 					end
 				elseif event[5].destination ~= os.computerID() or event[5].type == "HA" or event[5].type == "HT" or event[5].type == "HI" then
-					process.getFromName("netd"):queue("lyqydnet_packet", event[5])
+					netd:queue("lyqydnet_packet", event[5])
 				else
 					if net.socketTable[event[5].toSock] then
-						process.list[pidFromThread(net.socketTable[event[5].toSock])]:queue("lyqydnet_packet", event[5])
+						procFromThread(net.socketTable[event[5].toSock]):queue("lyqydnet_packet", event[5])
 					end
 				end
 			end
