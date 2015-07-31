@@ -455,12 +455,13 @@ function netDaemon()
 	end
 end
 
-net.daemonAdd("netd", netDaemon, 4)
-net.netInit()
-
 if process and process.id() then
 	--if run in lyqydos, set up correct processes.
-	process.new(netDaemon, "netd")
+	local netd = process.new(netDaemon, "netd")
+	net.socketTable[4] = netd.thread
+	net.daemonTable.netd = netd.thread
+	netd:queue("lyqydnet_packet", packet.new("SI", 0, "start"))
+	net.netInit()
 
 	local function pidFromThread(thread)
 		for pNum, pInfo in pairs(process.list) do
@@ -513,4 +514,7 @@ if process and process.id() then
 			return
 		end
 	end
+else
+	net.daemonAdd("netd", netDaemon, 4)
+	net.netInit()
 end
