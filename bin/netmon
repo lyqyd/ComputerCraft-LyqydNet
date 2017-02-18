@@ -18,9 +18,21 @@ for i = tonumber(args[1]), tonumber(args[2]) do
 	modem.open(i)
 end
 
+local log = {}
+
 while true do
 	local event = {os.pullEvent()}
 	if event[1] == "modem_message" then
 		print(event[4].."->"..event[3]..": "..(type(event[5]) == "table" and textutils.serialize(event[5]) or tostring(event[5])))
+		table.insert(log, event)
+	elseif event[1] == "char" and event[2] == "s" then
+		local handle = io.open("rn-log", "w")
+		if handle then
+			for i = 1, #log do
+				local event = log[i]
+				handle:write(event[4].."->"..event[3]..": "..(type(event[5]) == "table" and textutils.serialize(event[5]) or tostring(event[5])).."\n")
+			end
+			handle:close()
+		end
 	end
 end
