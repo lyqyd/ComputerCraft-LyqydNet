@@ -98,7 +98,7 @@ if not process then
 			error("Reserved hostname", 2)
 		end
 		if hostedProtocols[protocol] ~= hostname then
-			if not rednet.lookup(protocol, hostname) then
+			if rednet.lookup(protocol, hostname) ~= nil then
 				error("Hostname in use", 2)
 			end
 			hostedProtocols[protocol] = hostname
@@ -656,6 +656,8 @@ if process and process.id() then
 	net.daemonTable.netd = nd.thread
 	net.socketTable[4] = net.daemonTable.netd
 	net.netInit()
+	
+	local pid = process.id()
 
 	local function pidFromThread(thread)
 		for pNum, pInfo in pairs(process.list) do
@@ -701,7 +703,7 @@ if process and process.id() then
 		if event[1] == "modem_message" then
 			for pNum, pInfo in ipairs(process.list) do
 				if pInfo and pInfo.modem and pInfo.modem[event[2]] and pInfo.modem[event[2]][event[3]] then
-					if pInfo.name ~= "lrnd" and pInfo.name ~= "lyqydnet" then
+					if pInfo.name ~= "lrnd" and pNum ~= pid then
 						pInfo:queue(unpack(event))
 					end
 				end
