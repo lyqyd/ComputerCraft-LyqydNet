@@ -427,6 +427,19 @@ function netDaemon()
 							net.raw_send(net.routeTable[net.getRouteFromCID(pack.origin)].interface, pack.origin, pContents.data)
 						end
 					end
+				else
+					--see if there are any routers that will tell the new host about us.
+					local routerPresent = false
+					for rNum, rInfo in ipairs(net.routeTable) do
+						if rInfo and rInfo.type == "R" then
+							routerPresent = true
+							break
+						end
+					end
+					if not routerPresent then
+						--we're not a router, but we also don't know about a router, so tell the new host about ourself.
+						net.send(packet.new("HI", pack.origin, {id = os.getComputerID(), type = turtle and "T" or "C", label = os.getComputerLabel(), gateway = -1, cost = 0}))
+					end
 				end
 			elseif pack.type == "HI" then
 				local routeNum = net.add_route(pack.payload.id, pack.payload.type, pack.payload.label, pack.payload.gateway, pack.payload.cost, pack.side)
