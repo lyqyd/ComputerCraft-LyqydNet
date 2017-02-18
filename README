@@ -442,7 +442,7 @@ function serverFunction ()
 end
 
 --make sure the socket number here matches the socket number used above.
-net.addDaemon("server", serverFunction, 21)
+net.daemonAdd("server", serverFunction, 21)
 ------------------------------------------------------------------------
 
 4.3 - Example Client

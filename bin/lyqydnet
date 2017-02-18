@@ -98,7 +98,7 @@ if not process then
 			error("Reserved hostname", 2)
 		end
 		if hostedProtocols[protocol] ~= hostname then
-			if not rednet.lookup(protocol, hostname) then
+			if rednet.lookup(protocol, hostname) ~= nil then
 				error("Hostname in use", 2)
 			end
 			hostedProtocols[protocol] = hostname
@@ -656,10 +656,45 @@ if process and process.id() then
 	net.daemonTable.netd = nd.thread
 	net.socketTable[4] = net.daemonTable.netd
 	net.netInit()
+	
+	local pid = process.id()
 
 	local function pidFromThread(thread)
 		for pNum, pInfo in pairs(process.list) do
 			if pInfo and pInfo.thread == thread then return pNum end
+		end
+	end
+
+	local function dnsLookup(requester, protocol, hostname)
+		for pID, proc in ipairs(process.list) do
+			if proc and proc.rednet and proc.rednet.hosting then
+				local name = proc.rednet.hosting[protocol]
+				if name and (hostname == nil or name == hostname) then
+					rednet.send(requester, {sType = "lookup response", sHostname = name, sProtocol = protocol}, "dns")
+				end
+			end
+		end
+	end
+
+	local function received(id)
+		if not rnReceivedMessages[id] then
+			rnReceivedMessages[id] = true
+			rnReceivedTimeouts[os.startTimer(30)] = id
+			return true
+		else
+			return false
+		end
+	end
+
+	local function distributeRednet(side, origin, message, protocol, distance)
+		for pNum, pInfo in ipairs(process.list) do
+			if pInfo and pInfo.rednet and pInfo.rednet[side] then
+				if term.current then
+					pInfo:queue("rednet_message", origin, message, protocol)
+				else
+					pInfo:queue("rednet_message", origin, message, distance)
+				end
+			end
 		end
 	end
 
@@ -668,62 +703,17 @@ if process and process.id() then
 		if event[1] == "modem_message" then
 			for pNum, pInfo in ipairs(process.list) do
 				if pInfo and pInfo.modem and pInfo.modem[event[2]] and pInfo.modem[event[2]][event[3]] then
-					if pInfo.name ~= "lrnd" and pInfo.name ~= "lyqydnet" then
+					if pInfo.name ~= "lrnd" and pNum ~= pid then
 						pInfo:queue(unpack(event))
-					end
-				end
-			end
-			if event[3] == os.getComputerID() or event[3] == 65535 and (type(event[5]) ~= "table" or not event[5].lyqydnet or event[5].type ~= "RM") then
-				if type(event[5]) == "table" and event[5].nMessageID then
-					if not rnReceivedMessages[event[5].nMessageID] then
-						rnReceivedMessages[event[5].nMessageID] = true
-						rnReceivedTimeouts[os.startTimer(30)] = event[5].nMessageID
-						for pNum, pInfo in pairs(process.list) do
-							if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
-								if term.current then
-									pInfo:queue("rednet_message", event[4], event[5].message, event[5].sProtocol)
-								else
-									pInfo:queue("rednet_message", event[4], event[5], event[6])
-								end
-							end
-						end
-						if event[5].sProtocol == "dns" and event[5].message.sType == "lookup" then
-							for pID, proc in ipairs(process.list) do
-								if proc and proc.rednet and proc.rednet.hosting then
-									local hostname = proc.rednet.hosting[event[5].message.sProtocol]
-									if hostname then
-										rednet.send(event[4], {sType = "lookup response", sHostname = hostname, sProtocol = event[5].message.sProtocol}, "dns")
-										break
-									end
-								end
-							end
-						end
 					end
 				end
 			end
 			if type(event[5]) == "table" and event[5].lyqydnet then
 				if event[5].type == "RM" and (event[5].destination == os.getComputerID() or event[5].destination == 65535) then
-					--copied from lrnd
-					for pNum, pInfo in pairs(process.list) do
-						if pInfo and pInfo.rednet and pInfo.rednet[event[2]] then
-							if term.current then
-								pInfo:queue("rednet_message", event[5].origin, event[5].payload, event[5].protocol)
-							else
-								pInfo:queue("rednet_message", event[5].origin, event[5].payload, 0)
-							end
-						end
-					end
+					distributeRednet(event[2], event[5].origin, event[5].payload, event[5].protocol, 0)
 					--dns response
 					if event[5].protocol == "dns" and event[5].payload.sType == "lookup" then
-						for pID, proc in ipairs(process.list) do
-							if proc and proc.rednet and proc.rednet.hosting then
-								local hostname = proc.rednet.hosting[event[5].payload.sProtocol]
-								if hostname then
-									rednet.send(event[4], {sType = "lookup response", sHostname = hostname, sProtocol = event[5].payload.sProtocol}, "dns")
-									break
-								end
-							end
-						end
+						dnsLookup(event[4], event[5].payload.sProtocol, event[5].payload.sHostname)
 					end
 				elseif event[5].destination ~= os.computerID() or event[5].type == "HA" or event[5].type == "HT" or event[5].type == "HI" then
 					event[5].side = event[2]
@@ -732,6 +722,15 @@ if process and process.id() then
 					if net.socketTable[event[5].toSock] then
 						if event[5].toSock == 4 then event[5].side = event[2] end
 						process.list[pidFromThread(net.socketTable[event[5].toSock])]:queue("lyqydnet_packet", event[5])
+					end
+				end
+			elseif event[3] == os.getComputerID() or event[3] == 65535 then
+				if type(event[5]) == "table" and event[5].nMessageID then
+					if received(event[5].nMessageID) then
+						distributeRednet(event[2], event[4], event[5].message, event[5].sProtocol, event[6])
+						if event[5].sProtocol == "dns" and event[5].message.sType == "lookup" then
+							dnsLookup(event[4], event[5].message.sProtocol, event[5].message.sHostname)
+						end
 					end
 				end
 			end
